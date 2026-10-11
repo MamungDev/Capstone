@@ -1,0 +1,22 @@
+# Dependencies and local tooling
+node_modules/
+.npm/
+
+# Environment values and credentials
+.env
+.env.*
+!.env.example
+
+# Editor and operating-system files
+.vscode/
+.idea/
+*.log
+Thumbs.db
+Desktop.ini
+
+# Local build or test artifacts
+coverage/
+test-results/
+
+# Local Sites deployment identity
+.openai/
