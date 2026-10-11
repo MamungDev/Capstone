@@ -1,0 +1,17 @@
+{
+  "name": "mamungkun",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "bundle:auth": "esbuild src/supabase-client.js --bundle --format=esm --platform=browser --target=es2022 --outfile=dist/supabase-client.js",
+    "desktop:dev": "npm run bundle:auth && tauri dev",
+    "desktop:build": "tauri build --bundles nsis"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.57.4"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0",
+    "esbuild": "^0.25.0"
+  }
+}

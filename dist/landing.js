@@ -12,6 +12,10 @@
       <section class="home-end"><span class="end-star" aria-hidden="true">✦</span><h2>That idea you've been sitting on?<br><em>Give it somewhere to start.</em></h2><a class="home-button" href="#builder">Open your creative workspace</a></section>
     </main><footer class="home-footer"><a class="home-brand" href="#home">Mamungkun</a><p>A space for the first draft.</p><a href="#builder">Open workspace</a></footer>`;
   document.body.prepend(page);
+  document.querySelector('.shell .brand').innerHTML = '<span class="mark">&#10022;</span>Mamungkun';
+  page.querySelectorAll('.home-brand span, .example-note>span, .end-star').forEach(mark => {
+    mark.textContent = '\u2726';
+  });
   page.querySelector('.home-caption').textContent = 'Sign in with Google to enter. Drafts stay in this browser.';
   page.querySelectorAll('a[href="#builder"]').forEach(link => {
     link.addEventListener('click', event => {

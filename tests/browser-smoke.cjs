@@ -9,6 +9,11 @@ const assert = require('node:assert/strict');
   const root = path.resolve('dist');
   const server = http.createServer((req, res) => {
     const name = new URL(req.url, 'http://localhost').pathname;
+    if (name === '/auth-config.js') {
+      res.setHeader('Content-Type', 'text/javascript; charset=utf-8');
+      res.end('window.MAKERFLOW_AUTH_CONFIG = {};');
+      return;
+    }
     const file = path.resolve(root, '.' + (name === '/' ? '/index.html' : name));
     if (!file.startsWith(root + path.sep)) { res.writeHead(403).end(); return; }
     fs.readFile(file, (error, content) => {
@@ -70,7 +75,7 @@ const assert = require('node:assert/strict');
       await evaluate(`document.querySelectorAll('#landing a[href="#builder"]')[${i}].click()`);
       assert.equal(await evaluate("document.querySelector('.auth-modal').open"), true);
       await evaluate("document.querySelector('.auth-google').click()");
-      assert.match(await evaluate("document.querySelector('.auth-status').textContent"), /isn’t connected/);
+      assert.match(await evaluate("document.querySelector('.auth-status').textContent"), /is not connected/);
       await send('Input.dispatchKeyEvent', {type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
       await send('Input.dispatchKeyEvent', {type:'keyUp',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
       assert.equal(await evaluate("document.querySelector('.auth-modal').open"), false);
