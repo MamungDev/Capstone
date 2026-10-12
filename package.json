@@ -4,6 +4,8 @@
   "version": "0.1.0",
   "scripts": {
     "bundle:auth": "esbuild src/supabase-client.js --bundle --format=esm --platform=browser --target=es2022 --outfile=dist/supabase-client.js",
+    "web:build": "npm run bundle:auth",
+    "web:dev": "npm run web:build && npx --yes serve@14.2.4 dist --listen 3000",
     "desktop:dev": "npm run bundle:auth && tauri dev",
     "desktop:build": "tauri build --bundles nsis"
   },

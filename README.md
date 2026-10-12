@@ -3,7 +3,29 @@
 Mamungkun turns a rough creative idea into a four-step brief. It supports
 reference images, sketching, and drafts saved on the current device.
 
-## Windows installer
+## Web app (primary)
+
+Mamungkun is now set up primarily as a browser-based web app. It needs no
+XAMPP, database server, or installer to run locally. From this folder, run:
+
+```powershell
+& "C:\Program Files\nodejs\npm.cmd" run web:dev
+```
+
+Then open [http://localhost:3000](http://localhost:3000). Keep the terminal
+open while using the app; press `Ctrl+C` in that terminal to stop it.
+
+For Google sign-in, Supabase must allow this redirect URL:
+
+```text
+http://localhost:3000/?auth=callback
+```
+
+To make the app public, deploy the `dist/` folder to a static host such as
+GitHub Pages, Netlify, or Cloudflare Pages. Add the final public address plus
+`/?auth=callback` to Supabase's Redirect URLs before testing sign-in there.
+
+## Optional Windows installer
 
 The desktop app is built with Tauri. It does not need an app store or a web
 server after installation.
@@ -30,16 +52,10 @@ then download the `Mamungkun-Windows-Setup` artifact. Unzip it to get the
 For development, run `npm run desktop:dev`. Desktop sign-in requires the
 Supabase callback URL in `AUTH_SETUP.md`.
 
-## Browser preview
-
-Run `npm run bundle:auth`, then serve `dist/` on port 3000. The browser
-version continues to use `http://localhost:3000/?auth=callback` for Google
-sign-in.
-
 ## Project layout
 
 - `dist/`: application HTML, styles, and JavaScript
 - `src/`: Supabase client entry, bundled into `dist/`
-- `src-tauri/`: desktop wrapper, OAuth callback, and Windows installer setup
+- `src-tauri/`: optional desktop wrapper and Windows installer setup
 - `tests/`: interaction checks
 - `AUTH_SETUP.md`: Google and Supabase setup

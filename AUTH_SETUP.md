@@ -11,12 +11,16 @@ app contains a Supabase Project URL and a **publishable** key.
    `https://dpuhmlbfxakbqmpzbfsb.supabase.co/auth/v1/callback`.
 2. In Supabase **Authentication > Sign In / Providers > Google**, enable Google,
    enter the Google Client ID and Client Secret, then save.
-3. In Supabase **Authentication > URL Configuration**, add both redirect URLs:
-   - `http://localhost:3000/?auth=callback` for browser preview
-   - `http://127.0.0.1:18765/?auth=callback` for the Windows desktop app
-4. Add `http://localhost:3000` to Google's authorized JavaScript origins if
-   you also use the browser preview. Google's redirect URI remains the
-   Supabase callback, even for the desktop installer.
+3. In Supabase **Authentication > URL Configuration**, add the browser redirect
+   URL:
+   - `http://localhost:3000/?auth=callback` for local web development
+   Add your deployed website address with `/?auth=callback` as well, for
+   example `https://your-domain.com/?auth=callback`. The Windows desktop URL
+   `http://127.0.0.1:18765/?auth=callback` is only needed if you distribute
+   the optional Windows installer.
+4. Add `http://localhost:3000` and your deployed web address to Google's
+   authorized JavaScript origins. Google's redirect URI remains the Supabase
+   callback.
 5. If Google's OAuth app is in Testing mode, add the Google accounts you will
    test with under **Audience > Test users**.
 6. Use the Supabase Project URL and `sb_publishable_...` key in

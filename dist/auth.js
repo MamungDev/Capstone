@@ -31,7 +31,7 @@
         <span>Continue with Google</span>
       </button>
       <p class="auth-status" role="status" aria-live="polite" hidden></p>
-      <p class="auth-note">Use the same button to sign up or sign in.<br>Your briefs are saved on this device.</p>
+      <p class="auth-note">Use the same button to sign up or sign in.<br>Drafts stay on this device. Submitted briefs are shared with the studio.</p>
       <button class="auth-cancel" type="button">Back to exploring</button>
     </div>`;
   document.body.appendChild(modal);
@@ -62,7 +62,7 @@
   }
   function enterWorkspace() {
     if (modal.open) modal.close();
-    location.hash = 'builder';
+    location.hash = 'workspace';
   }
   function updateAccount(nextUser) {
     user = nextUser;
@@ -73,6 +73,7 @@
       avatar.title = name || 'Not signed in';
     }
     signOut.hidden = !user;
+    window.dispatchEvent(new CustomEvent('account-changed'));
   }
 
   modal.querySelector('.auth-close').onclick = () => modal.close();
@@ -103,7 +104,9 @@
   updateAccount(null);
   window.makerflowAuth = {
     isSignedIn: () => Boolean(user),
-    open: () => user ? enterWorkspace() : show()
+    open: () => user ? enterWorkspace() : show(),
+    currentUser: () => user,
+    getClient
   };
 
   function getClient() {
@@ -119,7 +122,7 @@
         });
         client.auth.onAuthStateChange((_event, session) => {
           updateAccount(session?.user || null);
-          if (!session && location.hash === '#builder') location.hash = 'home';
+          if (!session && /^#(builder|workspace|artist|client|project)/.test(location.hash)) location.hash = 'home';
         });
         return client;
       }).catch(error => {
@@ -248,10 +251,10 @@
       }
     } finally {
       if (callback || rejected) {
-        history.replaceState(null, '', location.pathname + (user ? '#builder' : '#home'));
+        history.replaceState(null, '', location.pathname + (user ? '#workspace' : '#home'));
         window.dispatchEvent(new Event('hashchange'));
       }
     }
   }
-  restoreSession();
+  window.makerflowAuth.ready = restoreSession();
 })();

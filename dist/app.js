@@ -1,5 +1,5 @@
 (() => {
-  const storageKey = 'makerflow-brief-v1';
+  let storageKey = 'makerflow-brief-v1';
   const defaults = {
     flowVersion: 2, step: 1, submitted: false,
     projectName: '', projectType: 'Poster', idea: '',
@@ -16,22 +16,37 @@
   } catch {
     loadWarning = 'Your saved draft could not be read. You can still work in this session.';
   }
-  let brief = { ...defaults, ...stored };
-  for (const key of ['projectName', 'projectType', 'idea', 'audience', 'goal', 'format', 'style', 'energy', 'referenceName']) {
-    if (typeof brief[key] !== 'string') brief[key] = defaults[key];
+  function normalizeBrief(stored) {
+    let brief = { ...defaults, ...stored };
+    for (const key of ['projectName', 'projectType', 'idea', 'audience', 'goal', 'format', 'style', 'energy', 'referenceName']) {
+      if (typeof brief[key] !== 'string') brief[key] = defaults[key];
+    }
+    brief.tags = Array.isArray(brief.tags) ? brief.tags.filter(tag => typeof tag === 'string') : [];
+    brief.step = [1, 2, 3, 4].includes(brief.step) ? brief.step : 1;
+    // Old versions marked browser-only drafts as submitted. Reopen them for real submission.
+    brief.submitted = brief.submitted === true && typeof brief.submissionId === 'string';
+    if (stored.submitted && !brief.submitted) brief.step = 4;
+    for (const key of ['reference', 'sketch']) {
+      if (typeof brief[key] !== 'string' || !/^data:image\/(png|jpeg|webp|gif);base64,/.test(brief[key])) brief[key] = null;
+    }
+    // Repair only known option values from the previous encoding bug.
+    const formatMatch = /^(Poster|Square|Wide|Portrait).* (4:5|1:1|16:9|A4)$/.exec(brief.format);
+    brief.format = formatMatch ? `${formatMatch[1]} \u00b7 ${formatMatch[2]}` : defaults.format;
+    if (brief.flowVersion !== 2) {
+      brief = { ...defaults, ...brief, flowVersion: 2, step: 1, submitted: false };
+    }
+    return brief;
   }
-  brief.tags = Array.isArray(brief.tags) ? brief.tags.filter(tag => typeof tag === 'string') : [];
-  brief.step = [1, 2, 3, 4].includes(brief.step) ? brief.step : 1;
-  brief.submitted = brief.submitted === true;
-  for (const key of ['reference', 'sketch']) {
-    if (typeof brief[key] !== 'string' || !/^data:image\/(png|jpeg|webp|gif);base64,/.test(brief[key])) brief[key] = null;
-  }
-  // Repair only known option values from the previous encoding bug.
-  const formatMatch = /^(Poster|Square|Wide|Portrait).* (4:5|1:1|16:9|A4)$/.exec(brief.format);
-  brief.format = formatMatch ? `${formatMatch[1]} \u00b7 ${formatMatch[2]}` : defaults.format;
-  if (brief.flowVersion !== 2) {
-    brief = { ...defaults, ...brief, flowVersion: 2, step: 1, submitted: false };
-  }
+  let brief = normalizeBrief(stored);
+
+  let submitting = false;
+  // Keep the submitted snapshot stable while an upload is in progress.
+  document.addEventListener('click', event => {
+    if (submitting && event.target.closest('button, a')) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }
+  }, true);
 
   const app = document.querySelector('#app');
   const toast = document.querySelector('#toast');
@@ -47,7 +62,7 @@
   const save = () => {
     try {
       localStorage.setItem(storageKey, JSON.stringify(brief));
-      saved.textContent = 'Saved';
+      saved.textContent = brief.submitted ? 'Submitted' : 'Draft saved';
       return true;
     } catch {
       saved.textContent = 'Not saved';
@@ -199,19 +214,52 @@
       <div class="eyebrow">Step 04 — review your brief</div>
       <h1>Your brief is <em>taking shape.</em></h1>
       <p class="intro">Review the essentials and submit when it feels right.</p>
-      <section class="review"><div class="card"><div class="summary"><strong>Project</strong><div>${escape(brief.projectName)}</div></div><div class="summary"><strong>Idea</strong><div>${escape(brief.idea)}</div></div><div class="summary"><strong>Audience & goal</strong><div>${escape(brief.audience || 'Not specified')} · ${escape(brief.goal || 'Not specified')}</div></div><div class="summary"><strong>Direction</strong><div>${escape(brief.style)} · ${escape(brief.energy)} · ${escape(brief.format)}</div></div><div class="summary"><strong>Keywords</strong><div>${brief.tags.length ? brief.tags.map(tag => `<span class="chip on" style="display:inline-block;margin:0 5px 5px 0">${tag}</span>`).join('') : 'No keywords selected'}</div></div></div><div class="card"><div class="preview">${visual ? `<img src="${visual}" alt="Your visual reference">` : '<div>No visual reference yet<br><span class="subtle">Your written direction will lead.</span></div>'}</div><div class="summary" style="padding-bottom:0"><strong>Visual reference</strong><div>${visual ? (brief.referenceName || 'Your sketch') : 'None added'}</div></div></div></section>
+      <section class="review"><div class="card"><div class="summary"><strong>Project</strong><div>${escape(brief.projectName)}</div></div><div class="summary"><strong>Idea</strong><div>${escape(brief.idea)}</div></div><div class="summary"><strong>Audience & goal</strong><div>${escape(brief.audience || 'Not specified')} · ${escape(brief.goal || 'Not specified')}</div></div><div class="summary"><strong>Direction</strong><div>${escape(brief.style)} · ${escape(brief.energy)} · ${escape(brief.format)}</div></div><div class="summary"><strong>Keywords</strong><div>${brief.tags.length ? brief.tags.map(tag => `<span class="chip on" style="display:inline-block;margin:0 5px 5px 0">${escape(tag)}</span>`).join('') : 'No keywords selected'}</div></div></div><div class="card"><div class="preview">${visual ? `<img src="${visual}" alt="Your visual reference">` : '<div>No visual reference yet<br><span class="subtle">Your written direction will lead.</span></div>'}</div><div class="summary" style="padding-bottom:0"><strong>Visual reference</strong><div>${visual ? (brief.referenceName || 'Your sketch') : 'None added'}</div></div></div></section>
+      <p id="submissionStatus" role="status" aria-live="polite"></p>
       ${footer(3, 'Submit brief')}`;
-    bindFooter(3, () => {
+    bindFooter(3, async () => {
       if (!brief.projectName.trim() || !brief.idea.trim()) {
         brief.step = 1; render(); say('Add a project name and description before saving your brief.'); return;
       }
-      brief.submitted = true;
-      if (save()) render(); else brief.submitted = false;
+      if (submitting) return;
+      submitting = true;
+      const button = document.querySelector('#nextButton');
+      const status = document.querySelector('#submissionStatus');
+      button.disabled = true;
+      button.textContent = 'Submitting...';
+      status.textContent = 'Uploading your brief. Please keep this page open.';
+      try {
+        const { submitBrief } = await import('./submissions.js');
+        // Preserve a retry ID for this exact draft, including after a network interruption.
+        const signatureData = JSON.stringify([brief.projectName, brief.projectType, brief.idea, brief.audience, brief.goal, brief.tags, brief.format, brief.style, brief.energy, brief.reference, brief.sketch]);
+        const signature = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(signatureData))), byte => byte.toString(16).padStart(2, '0')).join('');
+        if (brief.pendingSignature !== signature) { brief.pendingId = crypto.randomUUID(); brief.pendingSignature = signature; save(); }
+        const receipt = await submitBrief(JSON.parse(JSON.stringify(brief)));
+        brief.submissionId = receipt.id;
+        brief.submitted = true;
+        save();
+        render();
+      } catch (error) {
+        brief.submitted = false;
+        status.setAttribute('role', 'alert');
+        status.style.color = '#a33c32';
+        status.textContent = ['42P01', '42703', 'PGRST200', 'PGRST204', 'PGRST205'].includes(error.code)
+          ? 'The shared workspace is not set up yet. Ask the app owner to complete setup, then try again. Your draft is still here.'
+          : error.message || 'Submission failed. Your draft is still here; please try again.';
+        button.disabled = false;
+        button.textContent = 'Try submitting again';
+      } finally {
+        submitting = false;
+      }
     });
   }
 
   function renderSuccess() {
-    app.innerHTML = `<section class="success"><div class="successmark">✓</div><div class="eyebrow">Brief saved</div><h1>Your idea is <em>ready to share.</em></h1><p>Your creative brief is saved on this device. You can make another whenever inspiration strikes.</p><button class="continue" id="newBrief">Create another brief</button></section>`;
+    app.innerHTML = `<section class="success"><div class="successmark">✓</div><div class="eyebrow">Brief submitted</div><h1>Your idea is <em>ready to share.</em></h1><p>Your creative brief and visual reference have been submitted successfully. You can make another whenever inspiration strikes.</p><p class="subtle">Submission ID: ${escape(brief.submissionId)}</p><button class="continue" id="newBrief">Create another brief</button></section>`;
+    const track = document.createElement('a');
+    track.className = 'continue'; track.href = '#project/' + encodeURIComponent(brief.submissionId);
+    track.textContent = 'Track this brief'; track.style.cssText = 'display:inline-block;margin:0 12px 12px;text-decoration:none';
+    document.querySelector('.success').appendChild(track);
     document.querySelector('#newBrief').onclick = () => { brief = { ...defaults }; save(); render(); };
   }
 
@@ -275,6 +323,20 @@
     const persisted = save(); sketchDialog.close(); render(); if (persisted) say('Sketch added.');
   };
 
+  // Keep drafts separate when different accounts use the same browser.
+  let draftUser = null;
+  const changeDraftAccount = () => {
+    const userId = window.makerflowAuth?.currentUser()?.id || null;
+    if (userId === draftUser) return;
+    draftUser = userId;
+    storageKey = userId ? 'makerflow-brief-v2:' + userId : 'makerflow-brief-guest';
+    let next = {};
+    try { next = JSON.parse(localStorage.getItem(storageKey) || '{}'); } catch { /* start clean */ }
+    brief = normalizeBrief(next && typeof next === 'object' && !Array.isArray(next) ? next : {});
+    render();
+  };
+  window.addEventListener('account-changed', changeDraftAccount);
+  window.addEventListener('new-brief', () => { brief = { ...defaults }; save(); render(); });
   render();
   if (loadWarning) { saved.textContent = 'Not saved'; say(loadWarning); }
 })();

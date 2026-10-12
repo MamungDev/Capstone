@@ -35,12 +35,14 @@
   `;
   document.head.appendChild(style);
   document.querySelector('.shell nav .nav').insertAdjacentHTML('afterbegin', '<a class="builder-home" href="#home">Home</a>');
-  function navigate() {
-    if (location.hash === '#builder' && !window.makerflowAuth.isSignedIn()) {
+  async function navigate() {
+    await window.makerflowAuth.ready;
+    const protectedRoute = /^#(builder|workspace|artist|client|project)(\/|$)/.test(location.hash);
+    if (protectedRoute && !window.makerflowAuth.isSignedIn()) {
       history.replaceState(null, '', location.pathname + location.search + '#home');
       window.makerflowAuth.open();
     }
-    const home = location.hash !== '#builder';
+    const home = !/^#(builder|workspace|artist|client|project)(\/|$)/.test(location.hash);
     document.body.classList.toggle('home-view', home);
     document.title = home ? 'Mamungkun — a place for your next idea' : 'Mamungkun — creative brief';
     if (location.hash === '#how-it-works') page.querySelector('#how-it-works').scrollIntoView();
