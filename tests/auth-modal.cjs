@@ -12,6 +12,13 @@ class Element {
     if (!this.children.has(key)) this.children.set(key, new Element());
     return this.children.get(key);
   }
+  querySelectorAll(key) {
+    if (key === '[data-auth-role]') return ['artist','client'].map(role => {
+      const element = this.querySelector(`[data-auth-role="${role}"]`);
+      element.dataset = {authRole:role}; return element;
+    });
+    return [];
+  }
   setAttribute() {}
   appendChild(child) { this.lastChild = child; }
   addEventListener(type, fn) { this.handlers[type] = fn; }
@@ -19,6 +26,7 @@ class Element {
   close() { this.open = false; this.handlers.close?.(); }
   focus() { this.focused = true; }
   getBoundingClientRect() { return { left: 20, right: 100, top: 20, bottom: 100 }; }
+  reportValidity() { return true; }
 }
 async function run() {
   const document = new Element();
@@ -31,18 +39,21 @@ async function run() {
     if (tag === 'dialog') modal = element;
     return element;
   };
-  const window = { MAKERFLOW_AUTH_CONFIG: {} };
+  const window = { MAKERFLOW_AUTH_CONFIG: {}, dispatchEvent() {} };
   vm.runInNewContext(fs.readFileSync('dist/auth.js', 'utf8'), {
-    window, document, MutationObserver: class { observe() {} }, location: { protocol: 'file:', hash: '#home' }, URL, URLSearchParams
+    window, document, CustomEvent: class {}, MutationObserver: class { observe() {} }, location: { protocol: 'file:', hash: '#home' }, URL, URLSearchParams
   });
   assert.equal(window.makerflowAuth.isSignedIn(), false);
   window.makerflowAuth.open();
   assert.equal(modal.open, true);
   assert.equal(document.body.classes.has('auth-open'), true);
-  const google = modal.querySelector('.auth-google');
-  assert.equal(google.focused, true);
-  await google.onclick();
-  assert.match(modal.querySelector('.auth-status').textContent, /Google sign-in/);
+  const email = modal.querySelector('#authEmail');
+  assert.equal(modal.querySelector('[data-auth-role="artist"]').focused, true);
+  modal.querySelector('[data-auth-role="artist"]').onclick();
+  assert.equal(modal.querySelector('.auth-methods').hidden, false);
+  assert.equal(email.focused, true);
+  await modal.querySelector('#authEmailForm').onsubmit({preventDefault(){}});
+  assert.match(modal.querySelector('.auth-status').textContent, /Sign-in is not connected/);
   assert.equal(window.makerflowAuth.isSignedIn(), false, 'Missing configuration must not fake login');
   modal.querySelector('.auth-close').onclick();
   assert.equal(modal.open, false);

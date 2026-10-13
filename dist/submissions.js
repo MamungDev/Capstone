@@ -3,7 +3,8 @@ import { sessionClient, getProfile } from './workspace-data.js';
 export async function submitBrief(brief) {
   const { client, user } = await sessionClient();
   // Check setup before uploading anything; an absent migration must not lose a draft.
-  await getProfile();
+  const profile = await getProfile();
+  if (!profile.onboarded_at) throw new Error('Please finish registration in My workspace before submitting your brief. Your draft is still saved.');
   const name = brief.projectName.trim();
   if (!name || !brief.idea.trim()) throw new Error('Add a project name and description before submitting.');
   if (name.length > 120) throw new Error('Please shorten the project name to 120 characters or fewer.');

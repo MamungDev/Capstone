@@ -15,15 +15,18 @@ XAMPP, database server, or installer to run locally. From this folder, run:
 Then open [http://localhost:3000](http://localhost:3000). Keep the terminal
 open while using the app; press `Ctrl+C` in that terminal to stop it.
 
-For Google sign-in, Supabase must allow this redirect URL:
+For email confirmation and password recovery, Supabase must allow these redirect URLs:
 
 ```text
-http://localhost:3000/?auth=callback
+http://localhost:3000/?auth=confirm
+http://localhost:3000/?auth=recovery
 ```
 
 To make the app public, deploy the `dist/` folder to a static host such as
 GitHub Pages, Netlify, or Cloudflare Pages. Add the final public address plus
-`/?auth=callback` to Supabase's Redirect URLs before testing sign-in there.
+`/?auth=confirm` and `/?auth=recovery` to Supabase's Redirect URLs before testing
+sign-in there. See [EMAIL_AUTH_SETUP.md](EMAIL_AUTH_SETUP.md) for setup and the
+requested account/submission reset.
 
 ## Optional Windows installer
 
@@ -52,10 +55,17 @@ then download the `Mamungkun-Windows-Setup` artifact. Unzip it to get the
 For development, run `npm run desktop:dev`. Desktop sign-in requires the
 Supabase callback URL in `AUTH_SETUP.md`.
 
+## Registration and artist access
+
+See [REGISTRATION_SETUP.md](REGISTRATION_SETUP.md) to activate client registration
+and owner-reviewed artist applications. Existing accounts keep their roles; new
+users choose Client or Artist and register with their email and password. Run the
+`supabase/004_registration.sql` migration before using the updated app.
+
 ## Project layout
 
 - `dist/`: application HTML, styles, and JavaScript
 - `src/`: Supabase client entry, bundled into `dist/`
 - `src-tauri/`: optional desktop wrapper and Windows installer setup
 - `tests/`: interaction checks
-- `AUTH_SETUP.md`: Google and Supabase setup
+- `EMAIL_AUTH_SETUP.md`: email/password sign-in and Supabase setup

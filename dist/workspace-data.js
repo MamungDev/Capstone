@@ -5,6 +5,9 @@ export const STATUSES = [
 export const statusLabel = value => STATUSES.find(([key]) => key === value)?.[1] || value;
 
 export function explainError(error) {
+  if (error?.code === 'PGRST202' || (error?.code === '42703' && error?.message?.includes('onboarded_at'))) {
+    return 'Registration is not set up yet. Ask the app owner to run supabase/004_registration.sql, then refresh.';
+  }
   if (['42P01', '42703', 'PGRST200', 'PGRST204', 'PGRST205'].includes(error?.code)) {
     return 'The shared workspace is not set up yet. Ask the app owner to complete the database setup, then refresh.';
   }
@@ -20,9 +23,24 @@ export async function sessionClient() {
 
 export async function getProfile() {
   const { client, user } = await sessionClient();
-  const { data, error } = await client.from('profiles').select('id,display_name,email,role').eq('id', user.id).single();
+  const { data, error } = await client.from('profiles').select('id,display_name,email,role,onboarded_at').eq('id', user.id).single();
   if (error) throw error;
   return data;
+}
+
+export async function getApplication() {
+  const { client, user } = await sessionClient();
+  const { data, error } = await client.from('artist_applications')
+    .select('status,portfolio_url,introduction,review_message,submitted_at,reviewed_at')
+    .eq('user_id', user.id).maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function completeRegistration(values) {
+  const { client } = await sessionClient();
+  const { error } = await client.rpc('complete_registration', values);
+  if (error) throw error;
 }
 
 const projectFields = 'id,name,description,mode,created_at,updated_at,status,client_id,brief_details,image_path,image_url,client:profiles!projects_client_id_fkey(display_name,email)';

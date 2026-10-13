@@ -222,9 +222,15 @@
         brief.step = 1; render(); say('Add a project name and description before saving your brief.'); return;
       }
       if (submitting) return;
-      submitting = true;
       const button = document.querySelector('#nextButton');
       const status = document.querySelector('#submissionStatus');
+      if (!window.makerflowAuth?.isSignedIn()) {
+        save();
+        status.textContent = 'Sign in or create an account to submit. Your draft is saved on this device.';
+        window.makerflowAuth?.open();
+        return;
+      }
+      submitting = true;
       button.disabled = true;
       button.textContent = 'Submitting...';
       status.textContent = 'Uploading your brief. Please keep this page open.';

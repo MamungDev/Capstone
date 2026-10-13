@@ -1,4 +1,5 @@
-import { STATUSES, statusLabel, explainError, getProfile, listProjects, projectCounts, getProject, changeStatus, getNote, saveNote, referenceUrl } from './workspace-data.js';
+import { STATUSES, statusLabel, explainError, getProfile, getApplication, listProjects, projectCounts, getProject, changeStatus, getNote, saveNote, referenceUrl } from './workspace-data.js';
+import { renderRegistration, renderApplication } from './registration.js';
 
 const panel = document.createElement('section');
 panel.id = 'sharedWorkspace';
@@ -46,6 +47,12 @@ async function renderList(artist, version) {
       <div id="wsResults" aria-live="polite"><p class="ws-loading">Loading briefs…</p></div>
     </section><p class="ws-footnote">${artist ? 'Private notes stay in the studio. Clients can see project status updates.' : 'Your briefs are visible to you and the studio team.'}</p>`;
   panel.querySelector('#wsNew').onclick = newBrief;
+  if (!artist && profile.role !== 'artist') {
+    const applicationLink = document.createElement('a');
+    applicationLink.className = 'reg-account-link'; applicationLink.href = '#application';
+    applicationLink.textContent = 'Artist application';
+    panel.querySelector('.ws-heading-actions').append(applicationLink);
+  }
   const refresh = () => { loadResults(); loadCounts(); };
   panel.querySelector('#wsRefresh').onclick = refresh;
   let timer;
@@ -174,7 +181,7 @@ async function route() {
   await window.makerflowAuth.ready;
   if (version !== routeVersion) return;
   const hash = location.hash.slice(1);
-  const dashboard = /^(workspace|artist|client|project)(\/|$)/.test(hash);
+  const dashboard = /^(workspace|artist|client|project|register|application|builder)(\/|$)/.test(hash);
   const signedIn = window.makerflowAuth.isSignedIn();
   nav.hidden = !signedIn;
   panel.hidden = !dashboard || !signedIn;
@@ -188,10 +195,35 @@ async function route() {
     if (version !== routeVersion) return;
     const artist = profile.role === 'artist';
     nav.textContent = artist ? 'Artist workspace' : 'My briefs';
+    if (!profile.onboarded_at) {
+      if (hash !== 'register') history.replaceState(null, '', '#register');
+      renderRegistration(panel, profile, null, () => version === routeVersion);
+      return;
+    }
+    if (hash === 'builder') {
+      panel.hidden = true;
+      document.querySelector('.shell').classList.remove('workspace-view');
+      return;
+    }
+    const application = !artist || hash === 'application' ? await getApplication() : null;
+    if (version !== routeVersion) return;
     let target = hash;
     if (hash === 'workspace') {
-      target = artist ? 'artist' : 'client';
+      const requestedRole = window.makerflowAuth.registrationIntent?.();
+      target = requestedRole === 'client' ? 'client' : artist ? 'artist'
+        : requestedRole === 'artist' ? (application ? 'application' : 'register')
+        : application ? 'application' : 'client';
+      window.makerflowAuth.clearRegistrationIntent?.();
       history.replaceState(null, '', '#' + target);
+    }
+    if (target === 'register' || target === 'application') {
+      if (artist || application && (target === 'application' || application.status !== 'rejected')) {
+        renderApplication(panel, profile, application, route);
+      } else {
+        if (target !== 'register') history.replaceState(null, '', '#register');
+        renderRegistration(panel, profile, application, () => version === routeVersion);
+      }
+      return;
     }
     if (target === 'artist' && !artist) {
       panel.innerHTML = empty('This is the artist workspace', 'Your account has client access. Your submitted briefs are in My briefs.', '<a class="continue" href="#client">Go to my briefs</a>');

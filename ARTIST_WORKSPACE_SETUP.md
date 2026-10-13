@@ -12,9 +12,11 @@ Google sign-in. The studio has one shared artist inbox, not a public marketplace
 2. Run `supabase/003_grant_artist.sql`. It is configured for
    **regalariojayveesevilla@gmail.com**. That account must have signed into the
    app with Google at least once. Other accounts are clients by default.
-3. Hard-refresh the app with Ctrl+Shift+R. Open
+3. Run `supabase/004_registration.sql` to enable registration and artist
+   applications. See `REGISTRATION_SETUP.md` for activation and review instructions.
+4. Hard-refresh the app with Ctrl+Shift+R. Open
    `http://localhost:3000/#workspace`. Your account opens the Artist workspace.
-   A different Google account opens My briefs.
+   An existing client account opens My briefs; a new account completes registration.
 
 These SQL scripts require the Supabase SQL Editor's database administrator role.
 The browser publishable key cannot run them or grant artist privileges. No secret
@@ -46,7 +48,8 @@ keys are needed in app files.
   assigned to a different account. Submitted records are available through the
   artist inbox.
 - All artist accounts share access to the studio inbox and notes. Role assignment
-  is an administrator operation, never a public sign-up option.
+  is an administrator operation. Public sign-up creates an application only;
+  approval is required before artist privileges are granted.
 
 ## Deploy
 

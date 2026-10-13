@@ -16,13 +16,7 @@
   page.querySelectorAll('.home-brand span, .example-note>span, .end-star').forEach(mark => {
     mark.textContent = '\u2726';
   });
-  page.querySelector('.home-caption').textContent = 'Sign in with Google to enter. Drafts stay in this browser.';
-  page.querySelectorAll('a[href="#builder"]').forEach(link => {
-    link.addEventListener('click', event => {
-      event.preventDefault();
-      window.makerflowAuth.open();
-    });
-  });
+  page.querySelector('.home-caption').textContent = 'No account needed. Your draft stays in this browser.';
   const style = document.createElement('style');
   style.textContent = `
     body.home-view>.shell{display:none}body:not(.home-view) #landing{display:none}
@@ -37,12 +31,12 @@
   document.querySelector('.shell nav .nav').insertAdjacentHTML('afterbegin', '<a class="builder-home" href="#home">Home</a>');
   async function navigate() {
     await window.makerflowAuth.ready;
-    const protectedRoute = /^#(builder|workspace|artist|client|project)(\/|$)/.test(location.hash);
+    const protectedRoute = /^#(workspace|artist|client|project|register|application)(\/|$)/.test(location.hash);
     if (protectedRoute && !window.makerflowAuth.isSignedIn()) {
       history.replaceState(null, '', location.pathname + location.search + '#home');
       window.makerflowAuth.open();
     }
-    const home = !/^#(builder|workspace|artist|client|project)(\/|$)/.test(location.hash);
+    const home = !/^#(builder|workspace|artist|client|project|register|application)(\/|$)/.test(location.hash);
     document.body.classList.toggle('home-view', home);
     document.title = home ? 'Mamungkun — a place for your next idea' : 'Mamungkun — creative brief';
     if (location.hash === '#how-it-works') page.querySelector('#how-it-works').scrollIntoView();
