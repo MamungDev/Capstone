@@ -7,6 +7,7 @@ return [
     'db_name' => 'mamungkun_capstone',
     'db_user' => 'root',
     'db_password' => '',
+    'admin_password' => '', // Local only; use ADMIN_PASSWORD in Vercel (16+ characters).
     'google_client_id' => '',
     'google_client_secret' => '',
     'google_redirect_uri' => 'http://localhost/Capstone/auth/google-callback.php',

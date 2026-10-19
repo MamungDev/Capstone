@@ -27,6 +27,24 @@ The local database connection is configured in `auth/config.local.php`. That fil
 
 Google sign-in is deferred until launch and is hidden from the demo modal. Password recovery is also not configured yet. A public launch should add email verification, password recovery, rate limiting, HTTPS, and a restricted MySQL user.
 
+## Account manager
+
+Open `/Admin/index.php` to manage the accounts in the database used by that deployment. The page lists names, emails, roles, registration dates, and submitted brief counts, with search, role filters, and pagination. App client and artist passwords do not grant admin access.
+
+To enable the live account manager:
+
+1. Open **Vercel → Capstone → Settings → Environment Variables**.
+2. Add `ADMIN_PASSWORD` with a unique password or passphrase of at least 16 characters. Mark it Sensitive and select the deployment environment you want to manage.
+3. Redeploy, then open `https://capstone-smoky-theta.vercel.app/Admin/index.php` and enter that password. No admin email or Google account is required.
+
+Keep the password in Vercel, not in GitHub or chat. Admin access is disabled when the password is missing or shorter than 16 characters. For XAMPP only, add an `admin_password` entry to the ignored `auth/config.local.php` and visit `http://localhost/Capstone/Admin/index.php`; that instance manages your local database, not Aiven.
+
+Admin sign-in expires after at most one hour. Changing `ADMIN_PASSWORD` and redeploying invalidates existing admin sessions. Ten failed admin sign-in attempts lock admin sign-in for the remainder of a 15-minute window; the limit is shared across sessions. The `admin_login_limits` table is created automatically when needed.
+
+Select **Delete** to review an account and its brief count, then type its exact email to confirm. Confirming permanently deletes that account and all its submitted briefs, including attached images and sketches. Other accounts are preserved. A deleted account loses access on its next request. The manager does not show password hashes or support account editing or password resets yet.
+
+Run `node tests/admin-accounts.cjs` with XAMPP MySQL running to check admin authentication, access restrictions, CSRF, search/filter/pagination, deletion, shared login limits, and password rotation. This uses a temporary database and a local PHP server and cleans them up afterwards; existing accounts are not deleted. Set `PHP_BINARY` if PHP is installed somewhere other than `C:/xampp/php/php.exe`.
+
 ## Vercel deployment
 
 Vercel runs this PHP project through the community `vercel-php` runtime configured in `vercel.json`. Import the GitHub repository `MamungDev/Capstone` in Vercel, leave the root directory as `.`, choose the **Other** framework preset, and leave the build command and output directory empty. The XAMPP database at `127.0.0.1` is only available on your computer; Vercel needs a hosted MySQL service such as Aiven.
@@ -34,7 +52,7 @@ Vercel runs this PHP project through the community `vercel-php` runtime configur
 ### Aiven MySQL
 
 1. In the Aiven MySQL service, use the existing `defaultdb` database shown under **Connection information**. Download its **CA certificate** (`ca.pem`). Keep the Aiven password out of project files and chat.
-2. The deployed app creates missing `users`, `client_briefs`, and `app_sessions` tables from `auth/schema.sql` on its first request. The schema uses `CREATE TABLE IF NOT EXISTS`, preserving existing accounts and briefs. If your database user does not have permission to create tables, connect with a MySQL client using the service's **Host**, **Port**, **User**, password, and downloaded CA certificate, then import `auth/schema.sql` into `defaultdb` manually.
+2. The deployed app creates missing `users`, `client_briefs`, `app_sessions`, and `admin_login_limits` tables from `auth/schema.sql` on its first request. The schema uses `CREATE TABLE IF NOT EXISTS`, preserving existing accounts and briefs. If your database user does not have permission to create tables, connect with a MySQL client using the service's **Host**, **Port**, **User**, password, and downloaded CA certificate, then import `auth/schema.sql` into `defaultdb` manually.
 3. For a manual import from this Windows project folder with XAMPP's MySQL client, replace the host and CA path below with the exact values in Aiven's **Quick connect** panel. The `--password` option prompts you securely. Never paste a password directly into the command line.
 
    ```powershell

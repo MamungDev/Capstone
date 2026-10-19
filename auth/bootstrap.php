@@ -99,6 +99,7 @@ function app_config(): array
             'db_password' => 'DB_PASSWORD',
             'db_ssl_ca' => 'DB_SSL_CA',
             'db_ssl_ca_pem' => 'DB_SSL_CA_PEM',
+            'admin_password' => 'ADMIN_PASSWORD',
             'google_client_id' => 'GOOGLE_CLIENT_ID',
             'google_client_secret' => 'GOOGLE_CLIENT_SECRET',
             'google_redirect_uri' => 'GOOGLE_REDIRECT_URI',
@@ -144,6 +145,7 @@ function ensure_database_schema(): void
         db()->query('SELECT 1 FROM app_sessions LIMIT 0');
         db()->query('SELECT 1 FROM users LIMIT 0');
         db()->query('SELECT 1 FROM client_briefs LIMIT 0');
+        db()->query('SELECT 1 FROM admin_login_limits LIMIT 0');
         return;
     } catch (PDOException $error) {
         if ($error->getCode() !== '42S02') throw $error;

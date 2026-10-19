@@ -19,6 +19,7 @@ $path = rawurldecode($path);
 $pages = [
     '/' => 'index.php',
     '/index.php' => 'index.php',
+    '/Admin/index.php' => 'Admin/index.php',
     '/Client/Client UI.php' => 'Client/Client UI.php',
     '/Client/submitted.php' => 'Client/submitted.php',
     '/Client/submit-brief.php' => 'Client/submit-brief.php',
@@ -39,6 +40,7 @@ $assets = [
     '/Client/client.css' => ['Client/client.css', 'text/css'],
     '/Client/client.js' => ['Client/client.js', 'text/javascript'],
     '/Artist/artist.css' => ['Artist/artist.css', 'text/css'],
+    '/Admin/admin.css' => ['Admin/admin.css', 'text/css'],
 ];
 
 if (isset($assets[$path])) {

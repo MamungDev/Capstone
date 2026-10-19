@@ -15,6 +15,13 @@ CREATE TABLE IF NOT EXISTS users (
   UNIQUE KEY users_google_sub_unique (google_sub)
 ) ENGINE=InnoDB;
 
+CREATE TABLE IF NOT EXISTS admin_login_limits (
+  bucket CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  attempts INT UNSIGNED NOT NULL,
+  window_end BIGINT UNSIGNED NOT NULL,
+  PRIMARY KEY (bucket)
+) ENGINE=InnoDB;
+
 CREATE TABLE IF NOT EXISTS client_briefs (
   id CHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
   client_id BIGINT UNSIGNED NOT NULL,
