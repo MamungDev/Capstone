@@ -97,6 +97,7 @@ function app_config(): array
             'db_user' => 'DB_USER',
             'db_password' => 'DB_PASSWORD',
             'db_ssl_ca' => 'DB_SSL_CA',
+            'db_ssl_ca_pem' => 'DB_SSL_CA_PEM',
             'google_client_id' => 'GOOGLE_CLIENT_ID',
             'google_client_secret' => 'GOOGLE_CLIENT_SECRET',
             'google_redirect_uri' => 'GOOGLE_REDIRECT_URI',
@@ -105,9 +106,9 @@ function app_config(): array
             if ($value !== false && $value !== '') $config[$key] = $value;
         }
         if (getenv('VERCEL') !== false) {
-            foreach (['db_host', 'db_name', 'db_user', 'db_password'] as $key) {
-                if (!isset($config[$key]) || $config[$key] === '') {
-                    throw new RuntimeException('Missing required database configuration: ' . strtoupper($key) . '.');
+            foreach (['DB_HOST', 'DB_NAME', 'DB_USER', 'DB_PASSWORD', 'DB_SSL_CA_PEM'] as $name) {
+                if (getenv($name) === false || getenv($name) === '') {
+                    throw new RuntimeException('Missing required deployment configuration: ' . $name . '.');
                 }
             }
         }
@@ -130,10 +131,38 @@ function db(): PDO
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             PDO::ATTR_EMULATE_PREPARES => false,
         ];
-        if (!empty($config['db_ssl_ca'])) $options[PDO::MYSQL_ATTR_SSL_CA] = $config['db_ssl_ca'];
+        $options += mysql_ssl_options($config);
         $pdo = new PDO($dsn, $config['db_user'], $config['db_password'], $options);
     }
     return $pdo;
+}
+
+function mysql_ssl_options(array $config): array
+{
+    $caPath = $config['db_ssl_ca'] ?? '';
+    $caPem = $config['db_ssl_ca_pem'] ?? '';
+    if ($caPem !== '') {
+        // Vercel's deployed files are read-only. Its temporary directory can hold
+        // the CA certificate supplied through a project environment variable.
+        $caPem = str_replace('\\n', "\n", $caPem);
+        if (@openssl_x509_read($caPem) === false) {
+            throw new RuntimeException('DB_SSL_CA_PEM is not a valid PEM certificate.');
+        }
+        $caPath = tempnam(sys_get_temp_dir(), 'mamungkun-ca-');
+        if ($caPath === false || file_put_contents($caPath, $caPem) === false) {
+            throw new RuntimeException('Unable to prepare the database CA certificate.');
+        }
+        @chmod($caPath, 0600);
+        register_shutdown_function(static function () use ($caPath): void { @unlink($caPath); });
+    }
+    if ($caPath === '') return [];
+    if (!is_file($caPath) || !is_readable($caPath)) {
+        throw new RuntimeException('The database CA certificate file cannot be read.');
+    }
+    return [
+        PDO::MYSQL_ATTR_SSL_CA => $caPath,
+        PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT => true,
+    ];
 }
 
 function csrf_token(): string

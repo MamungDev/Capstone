@@ -1,7 +1,5 @@
-CREATE DATABASE IF NOT EXISTS mamungkun_capstone
-  CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
-USE mamungkun_capstone;
+-- Select the target database before importing this file.
+-- Local XAMPP: mamungkun_capstone. Aiven: defaultdb (or a database you created there).
 
 CREATE TABLE IF NOT EXISTS users (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
