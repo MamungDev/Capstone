@@ -9,9 +9,10 @@ function artist_query(string $key, string $fallback = ''): string {
     return is_string($_GET[$key] ?? null) ? trim($_GET[$key]) : $fallback;
 }
 function inbox_url(array $changes = []): string {
+    global $search, $type, $withVisual, $sort, $page;
     return 'Artist%20UI.php?' . http_build_query(array_merge([
-        'q' => artist_query('q'), 'type' => artist_query('type'),
-        'visual' => artist_query('visual'), 'sort' => artist_query('sort', 'newest'),
+        'q' => $search, 'type' => $type,
+        'visual' => $withVisual ? 'yes' : '', 'sort' => $sort, 'page' => $page,
     ], $changes));
 }
 function submitted_date(string $date): string {

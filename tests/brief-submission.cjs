@@ -28,9 +28,11 @@ async function signup(index, role) {
   const landing = await (await client.request('index.php')).text();
   client.csrf = JSON.parse(landing.match(/window\.MAMUNGKUN_AUTH\s*=\s*({[^;]+});/)[1]).csrf;
   const response = await client.request('auth/account.php', { csrf: client.csrf, action: 'signup',
-    role, name: 'Temporary brief test', email: emails[index], password });
+    role, name: `Temporary ${index === 0 ? 'owner' : index === 1 ? 'other' : 'artist'} ${suffix}`, email: emails[index], password });
   assert.equal(response.status, 200);
-  client.csrf = (await response.json()).csrf;
+  const result = await response.json();
+  assert.equal(result.redirect, role === 'artist' ? 'Artist/Artist%20UI.php' : 'Client/Client%20UI.php');
+  client.csrf = result.csrf;
   return client;
 }
 (async () => {
@@ -98,6 +100,7 @@ async function signup(index, role) {
     const list = await (await owner.request('Client/submitted.php')).text();
     assert.equal((list.match(/class="card brief-list-item"/g) || []).length, 3);
     execFileSync(php, ['-r', 'session_save_path(sys_get_temp_dir()); require $argv[1]; $q=db()->prepare("SELECT COUNT(*) FROM client_briefs b JOIN users u ON u.id=b.client_id WHERE u.email=?"); $q->execute([$argv[2]]); exit((int)$q->fetchColumn() === 3 ? 0 : 1);', bootstrap, emails[0]], { stdio: 'inherit' });
+    await require('./artist-workspace.cjs')({ owner, other, artist, anonymous, brief, png, submissionId, suffix, id, base, emails, password });
     console.log('PASS: persistence, upload/sketch, retry deduplication, validation, CSRF, role/owner isolation, escaped HTML, sign-out/sign-in.');
   } finally {
     execFileSync(php, ['-r', 'session_save_path(sys_get_temp_dir()); require $argv[1]; foreach(array_slice($argv,2) as $email) { $q=db()->prepare("DELETE b FROM client_briefs b JOIN users u ON u.id=b.client_id WHERE u.email=?"); $q->execute([$email]); $q=db()->prepare("DELETE FROM users WHERE email=?"); $q->execute([$email]); }', bootstrap, ...emails], { stdio: 'inherit' });

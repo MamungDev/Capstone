@@ -30,3 +30,11 @@ CREATE TABLE IF NOT EXISTS client_briefs (
   KEY client_briefs_owner_created (client_id, created_at),
   CONSTRAINT client_briefs_owner FOREIGN KEY (client_id) REFERENCES users (id)
 ) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS app_sessions (
+  session_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  session_data MEDIUMBLOB NOT NULL,
+  expires_at BIGINT UNSIGNED NOT NULL,
+  PRIMARY KEY (session_id),
+  KEY app_sessions_expires (expires_at)
+) ENGINE=InnoDB;
