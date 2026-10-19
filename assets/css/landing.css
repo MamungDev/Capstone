@@ -382,6 +382,10 @@ nav { display: flex; align-items: center; justify-content: space-between; }
   display:none
 }
 
+#landing .home-brand { font-size: 20px; }
+#landing .home-nav nav { gap: 12px; font-size: 12px; }
+#landing .compact { padding: 10px 12px; font-size: 12px; }
+
 #landing .home-hero {
   grid-template-columns:1fr;
   gap:38px
@@ -431,8 +435,9 @@ nav { display: flex; align-items: center; justify-content: space-between; }
 /* Keep the original layout comfortable on narrow phones. */
 #landing .home-hero > * { min-width: 0; }
 @media (max-width: 380px) {
-  #landing .home-brand { font-size: 21px; }
-  #landing .compact { padding: 12px; font-size: 12px; }
+  #landing .home-brand { font-size: 18px; }
+  #landing .home-nav nav { gap: 8px; font-size: 12px; }
+  #landing .compact { padding: 9px; font-size: 11px; }
   #landing h1 { font-size: 44px; }
   #landing .hero-actions { gap: 18px; }
   #landing .example-brief { padding: 18px; }

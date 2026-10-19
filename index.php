@@ -29,6 +29,7 @@ $signedInUser = current_user();
         <a class="home-brand" href="#home"><span aria-hidden="true">&#10022;</span>Mamungkun</a>
         <nav aria-label="Main navigation">
           <a href="#how-it-works">How it works</a>
+          <a href="Admin/login.php">Admin</a>
           <a class="home-button compact" href="#auth-modal" data-auth-open aria-haspopup="dialog" aria-controls="auth-modal">Open workspace</a>
         </nav>
       </header>
