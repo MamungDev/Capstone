@@ -34,8 +34,8 @@ Vercel runs this PHP project through the community `vercel-php` runtime configur
 ### Aiven MySQL
 
 1. In the Aiven MySQL service, use the existing `defaultdb` database shown under **Connection information**. Download its **CA certificate** (`ca.pem`). Keep the Aiven password out of project files and chat.
-2. Connect with a MySQL client using the service's **Host**, **Port**, **User**, password, and downloaded CA certificate. Select `defaultdb`, then import `auth/schema.sql`. The file creates the `users`, `client_briefs`, and `app_sessions` tables in the selected database. It no longer creates or selects a database by name, so the same file also works with the local `mamungkun_capstone` database.
-3. To import from this Windows project folder with XAMPP's MySQL client, replace the host and CA path below with the exact values in Aiven's **Quick connect** panel. The `--password` option prompts you securely. Never paste a password directly into the command line.
+2. The deployed app creates missing `users`, `client_briefs`, and `app_sessions` tables from `auth/schema.sql` on its first request. The schema uses `CREATE TABLE IF NOT EXISTS`, preserving existing accounts and briefs. If your database user does not have permission to create tables, connect with a MySQL client using the service's **Host**, **Port**, **User**, password, and downloaded CA certificate, then import `auth/schema.sql` into `defaultdb` manually.
+3. For a manual import from this Windows project folder with XAMPP's MySQL client, replace the host and CA path below with the exact values in Aiven's **Quick connect** panel. The `--password` option prompts you securely. Never paste a password directly into the command line.
 
    ```powershell
    Get-Content .\auth\schema.sql -Raw |

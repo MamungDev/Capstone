@@ -1,6 +1,16 @@
 <?php
 declare(strict_types=1);
 
+if (getenv('VERCEL') !== false) {
+    ini_set('display_errors', '0');
+    set_exception_handler(static function (Throwable $error): void {
+        error_log((string) $error);
+        http_response_code(503);
+        header('Content-Type: text/plain; charset=utf-8');
+        echo 'The service is temporarily unavailable. Please try again shortly.';
+    });
+}
+
 // Vercel's PHP runtime starts functions from api/. Keep the public URLs from
 // the XAMPP version while dispatching only files that the application exposes.
 $path = '/' . ltrim((string) ($_GET['path'] ?? parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH)), '/');

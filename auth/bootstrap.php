@@ -24,6 +24,7 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
     ]);
 
     if ($sessionDriver === 'mysql') {
+        if ($isVercel) ensure_database_schema();
         $sessionPdo = null;
         $getSessionPdo = static function () use (&$sessionPdo): PDO {
             return $sessionPdo ??= db();
@@ -137,6 +138,28 @@ function db(): PDO
     return $pdo;
 }
 
+function ensure_database_schema(): void
+{
+    try {
+        db()->query('SELECT 1 FROM app_sessions LIMIT 0');
+        db()->query('SELECT 1 FROM users LIMIT 0');
+        db()->query('SELECT 1 FROM client_briefs LIMIT 0');
+        return;
+    } catch (PDOException $error) {
+        if ($error->getCode() !== '42S02') throw $error;
+    }
+
+    // The checked-in schema uses CREATE TABLE IF NOT EXISTS, so concurrent
+    // cold starts and existing accounts/briefs remain safe.
+    $schema = file_get_contents(__DIR__ . '/schema.sql');
+    if ($schema === false) throw new RuntimeException('Database schema file is missing.');
+    $schema = preg_replace('/^\s*--[^\r\n]*$/m', '', $schema);
+    foreach (explode(';', $schema) as $statement) {
+        $statement = trim($statement);
+        if ($statement !== '') db()->exec($statement);
+    }
+}
+
 function mysql_ssl_options(array $config): array
 {
     $caPath = $config['db_ssl_ca'] ?? '';
@@ -158,6 +181,12 @@ function mysql_ssl_options(array $config): array
     if ($caPath === '') return [];
     if (!is_file($caPath) || !is_readable($caPath)) {
         throw new RuntimeException('The database CA certificate file cannot be read.');
+    }
+    if (class_exists(\Pdo\Mysql::class)) {
+        return [
+            \Pdo\Mysql::ATTR_SSL_CA => $caPath,
+            \Pdo\Mysql::ATTR_SSL_VERIFY_SERVER_CERT => true,
+        ];
     }
     return [
         PDO::MYSQL_ATTR_SSL_CA => $caPath,
