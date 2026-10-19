@@ -29,7 +29,8 @@ $deleteId = max(0, (int) text_input($_GET, 'delete'));
 $message = $_SESSION['admin_message'] ?? '';
 unset($_SESSION['admin_message']);
 $error = '';
-$configured = admin_secret() !== '';
+$adminPasswordStatus = admin_password_status();
+$configured = $adminPasswordStatus === 'ready';
 $authorized = admin_authorized();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -44,7 +45,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($result !== 'ok') {
                 http_response_code($result === 'limited' ? 429 : 403);
                 throw new DomainException(match ($result) {
-                    'disabled' => 'Admin access is not configured yet.',
+                    'disabled' => 'Admin access is not configured. Check the setup message below.',
                     'limited' => 'Too many sign-in attempts. Please try again in 15 minutes.',
                     default => 'The admin password is incorrect.',
                 });
@@ -148,7 +149,11 @@ if ($authorized) {
       <section class="admin-card login" aria-labelledby="login-title">
         <h2 id="login-title">Admin sign in</h2>
         <?php if (!$configured): ?>
-          <p>Admin access has not been enabled. Contact the site owner to finish setup.</p>
+          <?php if ($adminPasswordStatus === 'short'): ?>
+            <p>The saved admin password is shorter than 16 characters. Set a longer <code>ADMIN_PASSWORD</code> in Vercel and redeploy.</p>
+          <?php else: ?>
+            <p>This deployment has no <code>ADMIN_PASSWORD</code>. Save it for Production in Vercel, then deploy again.</p>
+          <?php endif; ?>
         <?php else: ?>
           <p>Enter your separate admin password to manage accounts.</p>
           <form method="post" action="index.php">

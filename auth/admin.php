@@ -2,10 +2,16 @@
 declare(strict_types=1);
 require_once __DIR__ . '/bootstrap.php';
 
-function admin_secret(): string
+function admin_password_status(): string
 {
     $secret = (string) (app_config()['admin_password'] ?? '');
-    return strlen($secret) >= 16 ? $secret : '';
+    if ($secret === '') return 'missing';
+    return strlen($secret) < 16 ? 'short' : 'ready';
+}
+
+function admin_secret(): string
+{
+    return admin_password_status() === 'ready' ? (string) app_config()['admin_password'] : '';
 }
 
 function admin_authorized(): bool

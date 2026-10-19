@@ -74,8 +74,11 @@ async function startServer(password) {
     `);
     await startServer('');
     const disabled = session();
-    assert.match((await disabled.request()).text, /Admin access has not been enabled/);
+    assert.match((await disabled.request()).text, /This deployment has no <code>ADMIN_PASSWORD<\/code>/);
     assert.equal((await disabled.request('Admin/index.php', { action: 'login', password: secret })).status, 403);
+
+    await startServer('short-password');
+    assert.match((await session().request()).text, /saved admin password is shorter than 16 characters/);
 
     await startServer(secret);
     const admin = session();
