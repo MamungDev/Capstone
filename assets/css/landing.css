@@ -378,7 +378,7 @@ nav { display: flex; align-items: center; justify-content: space-between; }
 }
 
 @media(max-width:620px) {
-#landing .home-nav nav>a:first-child {
+#landing .home-nav .home-how-link {
   display:none
 }
 
