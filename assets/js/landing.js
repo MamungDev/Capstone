@@ -100,13 +100,6 @@
   find('.auth-forgot').addEventListener('click', () => setMode('forgot'));
   find('.auth-close').addEventListener('click', () => modal.close());
   find('.auth-cancel').addEventListener('click', () => modal.close());
-  modal.addEventListener('click', (event) => {
-    const rect = modal.getBoundingClientRect();
-    if (event.target === modal && (
-      event.clientX < rect.left || event.clientX > rect.right ||
-      event.clientY < rect.top || event.clientY > rect.bottom
-    )) modal.close();
-  });
   modal.addEventListener('close', () => {
     document.body.classList.remove('auth-open');
     form.reset();
