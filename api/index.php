@@ -20,6 +20,7 @@ $pages = [
     '/' => 'index.php',
     '/index.php' => 'index.php',
     '/Admin/index.php' => 'Admin/index.php',
+    '/Admin/login.php' => 'Admin/login.php',
     '/Client/Client UI.php' => 'Client/Client UI.php',
     '/Client/submitted.php' => 'Client/submitted.php',
     '/Client/submit-brief.php' => 'Client/submit-brief.php',

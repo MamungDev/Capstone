@@ -7,6 +7,16 @@ header('X-Frame-Options: DENY');
 header("Content-Security-Policy: frame-ancestors 'none'; form-action 'self'; base-uri 'self'");
 header('Referrer-Policy: same-origin');
 
+if (!admin_authorized()) {
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        http_response_code(403);
+        header('Content-Type: text/html; charset=utf-8');
+        exit('Your admin session expired. <a href="login.php">Sign in again</a> to manage accounts.');
+    }
+    header('Location: login.php', true, 302);
+    exit;
+}
+
 function html(mixed $value): string
 {
     return htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
@@ -29,9 +39,6 @@ $deleteId = max(0, (int) text_input($_GET, 'delete'));
 $message = $_SESSION['admin_message'] ?? '';
 unset($_SESSION['admin_message']);
 $error = '';
-$adminPasswordStatus = admin_password_status();
-$configured = $adminPasswordStatus === 'ready';
-$authorized = admin_authorized();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
@@ -40,27 +47,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             throw new DomainException('Your session expired. Refresh the page and try again.');
         }
         $action = text_input($_POST, 'action');
-        if ($action === 'login') {
-            $result = admin_signin(is_string($_POST['password'] ?? null) ? $_POST['password'] : '');
-            if ($result !== 'ok') {
-                http_response_code($result === 'limited' ? 429 : 403);
-                throw new DomainException(match ($result) {
-                    'disabled' => 'Admin access is not configured. Check the setup message below.',
-                    'limited' => 'Too many sign-in attempts. Please try again in 15 minutes.',
-                    default => 'The admin password is incorrect.',
-                });
-            }
-            header('Location: index.php', true, 303);
-            exit;
-        }
-        if (!$authorized) {
-            http_response_code(403);
-            throw new DomainException('Sign in as admin to manage accounts.');
-        }
         if ($action === 'logout') {
             unset($_SESSION['admin_until'], $_SESSION['admin_proof'], $_SESSION['csrf_token']);
             session_regenerate_id(true);
-            header('Location: index.php', true, 303);
+            header('Location: login.php', true, 303);
             exit;
         }
         if ($action !== 'delete') {
@@ -86,7 +76,6 @@ $counts = ['total' => 0, 'clients' => 0, 'artists' => 0];
 $target = null;
 $total = 0;
 $pages = 1;
-if ($authorized) {
     try {
         $counts = db()->query("SELECT COUNT(*) AS total, COALESCE(SUM(role = 'client'), 0) AS clients, COALESCE(SUM(role = 'artist'), 0) AS artists FROM users")->fetch();
         $conditions = [];
@@ -116,7 +105,6 @@ if ($authorized) {
         http_response_code(503);
         $error = 'Accounts could not be loaded. Please try again.';
     }
-}
 ?>
 <!doctype html>
 <html lang="en">
@@ -135,7 +123,7 @@ if ($authorized) {
   <nav aria-label="Main navigation">
     <a class="brand" href="../index.php"><span class="mark" aria-hidden="true">&#10022;</span>Mamungkun</a>
     <div class="nav"><a href="../index.php">Home</a><span class="role-pill">Admin</span>
-      <?php if ($authorized): ?><form method="post" action="index.php"><input type="hidden" name="csrf" value="<?= html(csrf_token()) ?>"><input type="hidden" name="action" value="logout"><button class="plain" type="submit">Sign out of admin</button></form><?php endif; ?>
+      <form method="post" action="index.php"><input type="hidden" name="csrf" value="<?= html(csrf_token()) ?>"><input type="hidden" name="action" value="logout"><button class="plain" type="submit">Sign out of admin</button></form>
     </div>
   </nav>
   <main class="artist-main">
@@ -145,27 +133,6 @@ if ($authorized) {
     <?php if ($error): ?><p class="notice error" role="alert"><?= html($error) ?></p><?php endif; ?>
     <?php if ($message): ?><p class="notice success" role="status"><?= html($message) ?></p><?php endif; ?>
 
-    <?php if (!$authorized): ?>
-      <section class="admin-card login" aria-labelledby="login-title">
-        <h2 id="login-title">Admin sign in</h2>
-        <?php if (!$configured): ?>
-          <?php if ($adminPasswordStatus === 'short'): ?>
-            <p>The saved admin password is shorter than 16 characters. Set a longer <code>ADMIN_PASSWORD</code> in Vercel and redeploy.</p>
-          <?php else: ?>
-            <p>This deployment has no <code>ADMIN_PASSWORD</code>. Save it for Production in Vercel, then deploy again.</p>
-          <?php endif; ?>
-        <?php else: ?>
-          <p>Enter your separate admin password to manage accounts.</p>
-          <form method="post" action="index.php">
-            <input type="hidden" name="csrf" value="<?= html(csrf_token()) ?>">
-            <input type="hidden" name="action" value="login">
-            <label for="admin-password">Admin password</label>
-            <input id="admin-password" type="password" name="password" autocomplete="current-password" required maxlength="4096">
-            <button class="button" type="submit">Open account manager</button>
-          </form>
-        <?php endif; ?>
-      </section>
-    <?php else: ?>
       <section class="stats" aria-label="Account totals">
         <div class="stat"><span>All accounts</span><strong><?= html($counts['total']) ?></strong><small>Your community, together.</small></div>
         <div class="stat warm"><span>Clients</span><strong><?= html($counts['clients']) ?></strong><small>Ideas looking for a home.</small></div>
@@ -202,7 +169,6 @@ if ($authorized) {
         </div>
         <nav class="pagination" aria-label="Account pages"><span>Page <?= $page ?> of <?= $pages ?></span><div><?php if ($page > 1): ?><a class="small-button" href="<?= html(admin_url(['page' => $page - 1])) ?>">Previous</a><?php endif; ?> <?php if ($page < $pages): ?><a class="small-button" href="<?= html(admin_url(['page' => $page + 1])) ?>">Next</a><?php endif; ?></div></nav>
       </section>
-    <?php endif; ?>
   </main>
 </div>
 </body>

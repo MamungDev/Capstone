@@ -29,13 +29,13 @@ Google sign-in is deferred until launch and is hidden from the demo modal. Passw
 
 ## Account manager
 
-Open `/Admin/index.php` to manage the accounts in the database used by that deployment. The page lists names, emails, roles, registration dates, and submitted brief counts, with search, role filters, and pagination. App client and artist passwords do not grant admin access.
+Open `/Admin/login.php` for the dedicated admin sign-in page. Successful sign-in opens `/Admin/index.php` to manage the accounts in the database used by that deployment. Signed-out visitors to the account manager are redirected to sign-in. The manager lists names, emails, roles, registration dates, and submitted brief counts, with search, role filters, and pagination. App client and artist passwords do not grant admin access.
 
 To enable the live account manager:
 
 1. Open **Vercel → Capstone → Settings → Environment Variables**.
 2. Add `ADMIN_PASSWORD` with a unique password or passphrase of at least 16 characters. Mark it Sensitive and select the deployment environment you want to manage.
-3. Redeploy, then open `https://capstone-smoky-theta.vercel.app/Admin/index.php` and enter that password. No admin email or Google account is required.
+3. Redeploy, then open `https://capstone-smoky-theta.vercel.app/Admin/login.php` and enter that password. No admin email or Google account is required. If the password is missing or shorter than 16 characters, the sign-in page displays the specific setup issue and keeps sign-in disabled until you update the value and redeploy.
 
 Keep the password in Vercel, not in GitHub or chat. Admin access is disabled when the password is missing or shorter than 16 characters. For XAMPP only, add an `admin_password` entry to the ignored `auth/config.local.php` and visit `http://localhost/Capstone/Admin/index.php`; that instance manages your local database, not Aiven.
 
