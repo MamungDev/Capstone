@@ -2,6 +2,7 @@
 (() => {
   window.createClientSketchpad = ({ onSave, getName }) => {
     const icons = {
+      select: '<path d="M4 3v17l5-5 4 7 4-2-4-7 7-1L4 3Z"/>',
       pencil: '<path d="m4 16 12-12 4 4L8 20H4v-4ZM14 6l4 4"/>',
       marker: '<path d="m5 14 9-10 6 6-10 9-5-5ZM5 14l-2 7 7-2M13 5l6 6"/>',
       eraser: '<path d="m4 12 9-9 8 8-9 9H8l-4-4v-4ZM8 8l8 8M12 20h9"/>',
@@ -11,14 +12,14 @@
       ellipse: '<ellipse cx="12" cy="12" rx="9" ry="7"/>',
       text: '<path d="M4 7V4h16v3M12 4v16M8 20h8"/>',
       picker: '<path d="m14 4 6 6M16 6 5 17l-1 4 4-1L19 9M13 5l3-3 6 6-3 3"/>',
-      pan: '<path d="M8 12V5a2 2 0 0 1 4 0v7-9a2 2 0 0 1 4 0v9-6a2 2 0 0 1 4 0v9c0 5-3 7-7 7-3 0-5-2-7-5l-3-4a2 2 0 0 1 3-2l2 2"/>',
+      move: '<path d="M12 3v18M3 12h18M8 7l4-4 4 4M8 17l4 4 4-4M7 8l-4 4 4 4M17 8l4 4-4 4"/>',
       undo: '<path d="m8 4-5 5 5 5M3 9h11a7 7 0 0 1 0 14"/>',
       redo: '<path d="m16 4 5 5-5 5M21 9H10a7 7 0 0 0 0 14"/>',
       clear: '<path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/>',
       download: '<path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/>',
     };
     const svg = name => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name]}</svg>`;
-    const toolNames = { pencil: 'Pencil', marker: 'Marker', eraser: 'Eraser', line: 'Line', arrow: 'Arrow', rectangle: 'Rectangle', ellipse: 'Ellipse', text: 'Text', picker: 'Pick color', pan: 'Pan' };
+    const toolNames = { select: 'Select', pencil: 'Pencil', marker: 'Marker', eraser: 'Eraser', line: 'Line', arrow: 'Arrow', rectangle: 'Rectangle', ellipse: 'Ellipse', text: 'Text', picker: 'Pick color', move: 'Move' };
     const dialog = document.createElement('dialog');
     dialog.className = 'sketch-dialog';
     dialog.setAttribute('aria-labelledby', 'sketch-title');
@@ -38,7 +39,7 @@
         </div>
         <div class="sketch-text-settings" id="textSettings" hidden><button type="button" class="small" id="addTextBox" draggable="true">+ Add text box</button><label for="sketchFont">Text size</label><input id="sketchFont" type="number" min="12" max="96" value="28"><span>Add or drag a text box onto the canvas. Type inside it; drag its Move handle to reposition.</span></div>
       </div>
-      <div class="sketch-workspace" id="sketchViewport"><div class="sketch-sheet"><canvas id="sketchCanvas" width="1200" height="720" aria-label="Sketch canvas. Use the drawing tools to draw with a mouse, pen, or touch."></canvas><div class="sketch-grid" hidden></div><div class="sketch-text-layer"></div></div></div>
+      <div class="sketch-workspace" id="sketchViewport"><div class="sketch-sheet"><canvas id="sketchCanvas" width="1200" height="720" tabindex="0" aria-label="Sketch canvas. Press V for Select or G for Move. Drag a selection box or Shift-click to select multiple elements. Arrow keys move the selection."></canvas><div class="sketch-grid" hidden></div><div class="sketch-text-layer"></div><div class="sketch-selection" hidden></div></div></div>
       <div class="sketch-status"><span id="sketchHint" role="status">Pencil: draw freely on the canvas.</span><span>1200 &times; 720 px</span></div>
       <div class="modalactions"><span class="subtle" id="sketchMessage" role="status">Use this sketch to attach it to your brief.</span><div class="sketch-actions"><button type="button" class="small sketch-download" id="downloadSketch">${svg('download')} Download PNG</button><button type="button" class="continue" id="saveSketch">Use this sketch</button></div></div>
     </div>`;
@@ -51,16 +52,21 @@
     const width = canvas.width, height = canvas.height;
     const textLayer = $('.sketch-text-layer');
     let textBoxes = [], selectedText = null, textDrag = null;
+    let elements = [];
+    let selectedIds = new Set();
+    const imageCache = new Map();
+    const cloneElements = () => structuredClone(elements);
     const cloneBoxes = () => textBoxes.map(box => ({ ...box }));
     let tool = 'pencil', color = '#1d2b4d', zoom = 1, gesture = null;
     let history = [], historyIndex = -1, source, draft, loading = false, loadVersion = 0;
     const hints = {
+      select: 'Select (V): click an element or drag a box around several. Shift-click adds or removes; drag selected elements to move.',
       pencil: 'Pencil: draw freely on the canvas.', marker: 'Marker: add a soft, translucent stroke.',
       eraser: 'Eraser: brush over marks to remove them.', line: 'Drag a line. Hold Shift for 45-degree angles.',
       arrow: 'Drag an arrow to point out a detail. Hold Shift to constrain its angle.',
       rectangle: 'Drag a rectangle. Hold Shift for a square.', ellipse: 'Drag an ellipse. Hold Shift for a circle.',
       text: 'Add a text box, type inside it, and drag its Move handle. Arrow keys on the handle move it precisely.', picker: 'Click anywhere on the sketch to pick its color.',
-      pan: 'Drag to move around a zoomed canvas.',
+      move: 'Move (G): click and drag a stroke, shape, arrow, or text box. Arrow keys nudge; Shift moves 10 px.',
     };
     function updateHistory() {
       $('#sketchUndo').disabled = loading || historyIndex <= 0;
@@ -68,19 +74,19 @@
     }
     function commit() {
       history.splice(historyIndex + 1);
-      history.push({ pixels: ctx.getImageData(0, 0, width, height), boxes: cloneBoxes() });
+      history.push({ elements: cloneElements(), boxes: cloneBoxes() });
       // Bound memory while retaining the latest 20 edits and their starting state.
       if (history.length > 21) history.shift();
       historyIndex = history.length - 1;
       updateHistory();
     }
-    function restore() { if (historyIndex >= 0) ctx.putImageData(history[historyIndex].pixels, 0, 0); }
     function undo(direction) {
       if (loading || gesture || textDrag) return;
       finishTextEdit();
       const next = historyIndex + direction;
       if (next < 0 || next >= history.length) return;
-      historyIndex = next; restore(); textBoxes = history[next].boxes.map(box => ({ ...box })); renderTextBoxes(); updateHistory();
+      historyIndex = next; elements = structuredClone(history[next].elements); textBoxes = history[next].boxes.map(box => ({ ...box }));
+      selectedIds.clear(); selectedText = null; renderDrawing(); renderTextBoxes(); updateHistory();
     }
     function setColor(value) {
       color = value.toLowerCase(); $('#sketchColor').value = color;
@@ -90,14 +96,20 @@
       });
     }
     function setTool(value) {
+      if (gesture || textDrag) return;
       tool = value;
       dialog.querySelectorAll('[data-tool]').forEach(button => button.setAttribute('aria-pressed', button.dataset.tool === tool));
       $('#textSettings').hidden = tool !== 'text';
       $('#sketchHint').textContent = hints[tool];
-      canvas.style.cursor = tool === 'pan' ? 'grab' : tool === 'text' ? 'text' : 'crosshair';
+      canvas.style.cursor = tool === 'move' ? 'grab' : tool === 'select' ? 'default' : tool === 'text' ? 'text' : 'crosshair';
       textLayer.classList.toggle('is-editing', tool === 'text');
+      textLayer.classList.toggle('is-moving', ['move', 'select'].includes(tool));
       textLayer.querySelectorAll('textarea').forEach(input => { input.readOnly = tool !== 'text'; input.tabIndex = tool === 'text' ? 0 : -1; });
       finishTextEdit();
+      if (!['move', 'select'].includes(tool)) selectedIds.clear();
+      else if (!selectedIds.size && selectedText) selectedIds.add(selectedText);
+      textBoxes.forEach(positionTextBox);
+      updateSelection();
     }
     function layout() {
       const fittedWidth = Math.min(width, Math.max(1, viewport.clientWidth - 32), Math.max(1, viewport.clientHeight - 32) * width / height);
@@ -107,6 +119,7 @@
       $('#zoomValue').textContent = `${Math.round(zoom * 100)}%`;
       $('#zoomOut').disabled = zoom <= .5; $('#zoomIn').disabled = zoom >= 3;
       textBoxes.forEach(positionTextBox);
+      updateSelection();
     }
     function setZoom(value) {
       const previous = zoom;
@@ -152,7 +165,7 @@
       const scale = sheet.getBoundingClientRect().width / width;
       element.style.left = `${box.x / width * 100}%`; element.style.top = `${box.y / height * 100}%`;
       element.style.width = `${box.width * scale}px`; element.style.height = `${boxHeight(box) * scale}px`;
-      element.classList.toggle('is-selected', selectedText === box.id);
+      element.classList.toggle('is-selected', ['move', 'select'].includes(tool) ? selectedIds.has(box.id) : selectedText === box.id);
       element.classList.toggle('is-near-top', box.y * scale < 30);
       const input = element.querySelector('textarea');
       input.style.fontSize = `${box.size * scale}px`; input.style.padding = `${8 * scale}px`;
@@ -245,96 +258,265 @@
       }
       return output;
     }
+    const freehandTools = ['pencil', 'marker', 'eraser'];
+    const shapeTools = ['line', 'arrow', 'rectangle', 'ellipse'];
+    function elementPath(element) {
+      const path = new Path2D();
+      if (freehandTools.includes(element.tool)) {
+        const [start] = element.points;
+        if (element.points.every(p => p.x === start.x && p.y === start.y)) {
+          path.arc(start.x, start.y, element.lineWidth / 2, 0, Math.PI * 2);
+          return { path, fill: true };
+        }
+        path.moveTo(start.x, start.y);
+        element.points.slice(1).forEach(p => path.lineTo(p.x, p.y));
+      } else {
+        const { start, end } = element, dx = end.x - start.x, dy = end.y - start.y;
+        if (element.tool === 'rectangle') path.rect(start.x, start.y, dx, dy);
+        else if (element.tool === 'ellipse') path.ellipse(start.x + dx / 2, start.y + dy / 2, Math.abs(dx / 2), Math.abs(dy / 2), 0, 0, Math.PI * 2);
+        else {
+          path.moveTo(start.x, start.y); path.lineTo(end.x, end.y);
+          if (element.tool === 'arrow' && Math.hypot(dx, dy) > 0) {
+            const angle = Math.atan2(dy, dx), head = Math.min(Math.hypot(dx, dy) / 2, Math.max(16, element.lineWidth * 3));
+            for (const direction of [-1, 1]) { path.moveTo(end.x, end.y); path.lineTo(end.x - head * Math.cos(angle + direction * Math.PI / 6), end.y - head * Math.sin(angle + direction * Math.PI / 6)); }
+          }
+        }
+      }
+      return { path, fill: element.fill && ['rectangle', 'ellipse'].includes(element.tool) };
+    }
+    function drawElement(element) {
+      ctx.save(); ctx.translate(element.x, element.y);
+      if (element.tool === 'image') {
+        const image = imageCache.get(element.data);
+        if (image) ctx.drawImage(image, 0, 0, element.width, element.height);
+      } else {
+        ctx.strokeStyle = ctx.fillStyle = element.color; ctx.globalAlpha = element.opacity;
+        ctx.lineWidth = element.lineWidth; ctx.lineCap = ctx.lineJoin = 'round';
+        const { path, fill } = elementPath(element);
+        if (fill) ctx.fill(path); else ctx.stroke(path);
+      }
+      ctx.restore();
+    }
+    function renderDrawing(preview = null) {
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, width, height);
+      elements.forEach(drawElement);
+      if (preview) drawElement(preview);
+      updateSelection();
+    }
+    function bounds(element) {
+      if (element.tool === 'image') return { x: element.x, y: element.y, width: element.width, height: element.height };
+      const points = element.points || [element.start, element.end];
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (const p of points) { minX = Math.min(minX, p.x); minY = Math.min(minY, p.y); maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y); }
+      // Arrowheads can extend beyond the line's bounds.
+      const pad = element.lineWidth / 2 + (element.tool === 'arrow' ? Math.min(Math.hypot(element.end.x - element.start.x, element.end.y - element.start.y) / 2, Math.max(16, element.lineWidth * 3)) : 0);
+      return { x: minX + element.x - pad, y: minY + element.y - pad, width: maxX - minX + pad * 2, height: maxY - minY + pad * 2 };
+    }
+    function selectableItems() {
+      return [...elements.map(target => ({ target, isText: false, box: bounds(target) })), ...textBoxes.map(target => ({ target, isText: true, box: { x: target.x, y: target.y, width: target.width, height: boxHeight(target) } }))];
+    }
+    function selectionItems() { return selectableItems().filter(item => selectedIds.has(item.target.id)); }
+    function setSelection(ids) {
+      selectedIds = new Set(ids);
+      const boxes = textBoxes.filter(box => selectedIds.has(box.id));
+      selectedText = boxes.length === 1 ? boxes[0].id : null;
+      textBoxes.forEach(positionTextBox); updateSelection();
+    }
+    function selectionBounds(items) {
+      const x = Math.min(...items.map(item => item.box.x)), y = Math.min(...items.map(item => item.box.y));
+      return { x, y, width: Math.max(...items.map(item => item.box.x + item.box.width)) - x, height: Math.max(...items.map(item => item.box.y + item.box.height)) - y };
+    }
+    function updateSelection() {
+      const selection = $('.sketch-selection'), items = selectionItems();
+      const marquee = gesture?.tool === 'marquee' ? gesture.box : null;
+      selection.hidden = !['move', 'select'].includes(tool) || (!items.length && !marquee);
+      selection.classList.toggle('is-marquee', !!marquee);
+      selection.dataset.count = items.length;
+      if (selection.hidden) return;
+      const box = marquee || selectionBounds(items);
+      selection.style.left = (box.x / width * 100) + '%'; selection.style.top = (box.y / height * 100) + '%';
+      selection.style.width = (box.width / width * 100) + '%'; selection.style.height = (box.height / height * 100) + '%';
+    }
+    function selectMarquee(event) {
+      const end = point(event), g = gesture;
+      g.box = { x: Math.min(g.start.x, end.x), y: Math.min(g.start.y, end.y), width: Math.abs(end.x - g.start.x), height: Math.abs(end.y - g.start.y) };
+      const box = g.box;
+      const hits = box.width > 0 && box.height > 0 ? selectableItems().filter(item => item.box.x >= box.x && item.box.y >= box.y && item.box.x + item.box.width <= box.x + box.width && item.box.y + item.box.height <= box.y + box.height).map(item => item.target.id) : [];
+      setSelection([...g.base, ...hits]);
+    }
+    function hitElement(p) {
+      const tolerance = 6 * width / canvas.getBoundingClientRect().width;
+      for (let i = elements.length - 1; i >= 0; i--) {
+        const element = elements[i], x = p.x - element.x, y = p.y - element.y;
+        if (element.tool === 'image') {
+          if (x >= 0 && y >= 0 && x <= element.width && y <= element.height) return element;
+          continue;
+        }
+        const { path, fill } = elementPath(element);
+        ctx.save(); ctx.lineWidth = Math.max(element.lineWidth, tolerance * 2); ctx.lineCap = ctx.lineJoin = 'round';
+        const hit = (fill && ctx.isPointInPath(path, x, y)) || ctx.isPointInStroke(path, x, y);
+        ctx.restore(); if (hit) return element;
+      }
+      return null;
+    }
+    function placeMoved(target, x, y, isText) {
+      target.x = x; target.y = y;
+      if (isText) { constrainBox(target); positionTextBox(target); }
+      else {
+        const box = bounds(target), visible = 12;
+        // Keep a small part accessible when moving a large image off-canvas.
+        target.x += Math.max(visible - box.x - box.width, Math.min(0, width - visible - box.x));
+        target.y += Math.max(visible - box.y - box.height, Math.min(0, height - visible - box.y));
+        renderDrawing();
+      }
+    }
     function readDocument(value) {
-      if (!value || value.version !== 1 || typeof value.background !== 'string' || !/^data:image\/png;base64,/.test(value.background) || !Array.isArray(value.textBoxes) || value.textBoxes.length > 30) return null;
+      if (!value || ![1, 2].includes(value.version) || !Array.isArray(value.textBoxes) || value.textBoxes.length > 30) return null;
       const boxes = value.textBoxes;
       if (!boxes.every(box => box && typeof box.text === 'string' && box.text.length <= 500 && /^#[a-f0-9]{6}$/i.test(box.color) && ['x', 'y', 'width', 'size', 'opacity'].every(key => Number.isFinite(box[key])) && box.width >= 100 && box.width <= width && box.size >= 12 && box.size <= 96 && box.opacity >= .1 && box.opacity <= 1)) return null;
-      return { background: value.background, textBoxes: boxes.map(box => ({ id: crypto.randomUUID(), text: box.text, x: box.x, y: box.y, width: box.width, size: box.size, color: box.color, opacity: box.opacity })) };
+      const result = { textBoxes: boxes.map(box => ({ id: crypto.randomUUID(), text: box.text, x: box.x, y: box.y, width: box.width, size: box.size, color: box.color, opacity: box.opacity })) };
+      const imageData = data => typeof data === 'string' && /^data:image\/(png|jpeg|webp|gif);base64,/.test(data);
+      if (value.version === 1) return imageData(value.background) ? { ...result, background: value.background } : null;
+      const validPoint = p => p && Number.isFinite(p.x) && Number.isFinite(p.y) && Math.abs(p.x) <= width * 2 && Math.abs(p.y) <= Math.max(width, height) * 2;
+      if (!Array.isArray(value.elements) || !value.elements.every(element => {
+        if (!element || !Number.isFinite(element.x) || !Number.isFinite(element.y) || Math.abs(element.x) > width * 4 || Math.abs(element.y) > height * 4) return false;
+        if (element.tool === 'image') return imageData(element.data) && Number.isFinite(element.width) && Number.isFinite(element.height) && element.width > 0 && element.width <= width && element.height > 0 && element.height <= height;
+        if (!/^#[a-f0-9]{6}$/i.test(element.color) || !Number.isFinite(element.lineWidth) || element.lineWidth < 1 || element.lineWidth > 150 || !Number.isFinite(element.opacity) || element.opacity < .03 || element.opacity > 1) return false;
+        return freehandTools.includes(element.tool) ? Array.isArray(element.points) && element.points.length > 0 && element.points.every(validPoint) : shapeTools.includes(element.tool) && validPoint(element.start) && validPoint(element.end);
+      })) return null;
+      return { ...result, elements: value.elements.map(element => ({ ...structuredClone(element), id: crypto.randomUUID() })) };
     }
     function paint(event) {
-      const g = gesture;
-      const end = point(event, !['pencil', 'marker', 'eraser'].includes(g.tool));
-      restore();
-      ctx.save();
-      ctx.strokeStyle = ctx.fillStyle = g.tool === 'eraser' ? '#ffffff' : color;
-      ctx.lineWidth = Number($('#brushSize').value);
-      ctx.lineCap = ctx.lineJoin = 'round';
-      ctx.globalAlpha = g.tool === 'eraser' ? 1 : Number($('#sketchOpacity').value) / 100 * (g.tool === 'marker' ? .3 : 1);
-      if (g.tool === 'marker') ctx.lineWidth *= 3;
-      if (['pencil', 'marker', 'eraser'].includes(g.tool)) {
-        g.points.push(end);
-        ctx.beginPath(); ctx.moveTo(g.start.x, g.start.y);
-        g.points.forEach(p => ctx.lineTo(p.x, p.y));
-        if (g.points.every(p => p.x === g.start.x && p.y === g.start.y)) {
-          ctx.arc(g.start.x, g.start.y, ctx.lineWidth / 2, 0, Math.PI * 2); ctx.fill();
-        } else ctx.stroke();
+      const element = gesture.element, start = gesture.start;
+      const end = point(event, !freehandTools.includes(element.tool));
+      if (freehandTools.includes(element.tool)) {
+        const last = element.points.at(-1);
+        if (last.x !== end.x || last.y !== end.y) element.points.push(end);
       } else {
-        let dx = end.x - g.start.x, dy = end.y - g.start.y;
+        let dx = end.x - start.x, dy = end.y - start.y;
         if (event.shiftKey) {
-          if (g.tool === 'line' || g.tool === 'arrow') {
+          if (element.tool === 'line' || element.tool === 'arrow') {
             const angle = Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) * Math.PI / 4;
             const length = Math.hypot(dx, dy); dx = Math.cos(angle) * length; dy = Math.sin(angle) * length;
           } else { const side = Math.max(Math.abs(dx), Math.abs(dy)); dx = (Math.sign(dx) || 1) * side; dy = (Math.sign(dy) || 1) * side; }
         }
-        const x = g.start.x, y = g.start.y;
-        ctx.beginPath();
-        if (g.tool === 'rectangle') ctx.rect(x, y, dx, dy);
-        else if (g.tool === 'ellipse') ctx.ellipse(x + dx / 2, y + dy / 2, Math.abs(dx / 2), Math.abs(dy / 2), 0, 0, Math.PI * 2);
-        else {
-          ctx.moveTo(x, y); ctx.lineTo(x + dx, y + dy);
-          if (g.tool === 'arrow' && Math.hypot(dx, dy) > 0) {
-            const angle = Math.atan2(dy, dx), head = Math.min(Math.hypot(dx, dy) / 2, Math.max(16, ctx.lineWidth * 3));
-            for (const direction of [-1, 1]) { ctx.moveTo(x + dx, y + dy); ctx.lineTo(x + dx - head * Math.cos(angle + direction * Math.PI / 6), y + dy - head * Math.sin(angle + direction * Math.PI / 6)); }
-          }
-        }
-        if ($('#sketchFill').checked && ['rectangle', 'ellipse'].includes(g.tool)) ctx.fill();
-        else ctx.stroke();
+        element.end = { x: start.x + dx, y: start.y + dy };
       }
-      ctx.restore();
+      renderDrawing(element);
     }
+    function moveItems(items, dx, dy) {
+      if (items.length === 1) {
+        const item = items[0]; placeMoved(item.target, item.x + dx, item.y + dy, item.isText); updateSelection(); return;
+      }
+      // Apply one shared delta so group spacing is preserved at the canvas edges.
+      const box = selectionBounds(items);
+      dx = Math.max(Math.min(0, -box.x), Math.min(Math.max(0, width - box.x - box.width), dx));
+      dy = Math.max(Math.min(0, -box.y), Math.min(Math.max(0, height - box.y - box.height), dy));
+      for (const item of items) { item.target.x = item.x + dx; item.target.y = item.y + dy; if (item.isText) positionTextBox(item.target); }
+      renderDrawing();
+    }
+    function moveGesture(event) {
+      const g = gesture, p = point(event);
+      if (p.x === g.start.x && p.y === g.start.y) { resetMove(g); return; }
+      let dx = p.x - g.start.x, dy = p.y - g.start.y;
+      if ($('#sketchSnap').checked) {
+        const anchor = g.items.length === 1 ? g.items[0] : selectionBounds(g.items);
+        dx = Math.round((anchor.x + dx) / 24) * 24 - anchor.x; dy = Math.round((anchor.y + dy) / 24) * 24 - anchor.y;
+      }
+      moveItems(g.items, dx, dy);
+    }
+    function resetMove(g) {
+      for (const item of g.items) { item.target.x = item.x; item.target.y = item.y; if (item.isText) positionTextBox(item.target); }
+      renderDrawing();
+    }
+    function captureSelection() { return selectionItems().map(item => ({ ...item, x: item.target.x, y: item.target.y })); }
     canvas.addEventListener('pointerdown', event => {
-      if (loading || gesture || event.button !== 0) return;
-      event.preventDefault();
-      finishTextEdit();
-      const start = point(event, !['pencil', 'marker', 'eraser', 'picker'].includes(tool));
+      if (loading || gesture || textDrag || event.button !== 0) return;
+      event.preventDefault(); finishTextEdit(); canvas.focus({ preventScroll: true });
+      const start = point(event, ![...freehandTools, 'picker', 'move', 'select'].includes(tool));
       if (tool === 'picker') {
         const pixel = ctx.getImageData(Math.min(width - 1, Math.floor(start.x)), Math.min(height - 1, Math.floor(start.y)), 1, 1).data;
         setColor('#' + Array.from(pixel.slice(0, 3), channel => channel.toString(16).padStart(2, '0')).join('')); return;
       }
-      if (tool === 'text') {
-        addTextBox(start); return;
+      if (tool === 'text') { addTextBox(start); return; }
+      if (['move', 'select'].includes(tool)) {
+        const box = [...textBoxes].reverse().find(box => start.x >= box.x && start.x <= box.x + box.width && start.y >= box.y && start.y <= box.y + boxHeight(box));
+        const target = box || hitElement(start);
+        if (target) {
+          if (event.shiftKey) {
+            const ids = new Set(selectedIds); if (ids.has(target.id)) ids.delete(target.id); else ids.add(target.id);
+            setSelection(ids); return;
+          }
+          if (!selectedIds.has(target.id)) setSelection([target.id]);
+          gesture = { id: event.pointerId, tool: 'move', start, items: captureSelection() };
+          canvas.style.cursor = 'grabbing';
+        } else if (tool === 'select') {
+          const previous = [...selectedIds], base = event.shiftKey ? previous : [];
+          gesture = { id: event.pointerId, tool: 'marquee', start, previous, base, box: { ...start, width: 0, height: 0 } };
+          setSelection(base);
+        } else { setSelection([]); return; }
+      } else {
+        const element = { id: crypto.randomUUID(), tool, x: 0, y: 0, color: tool === 'eraser' ? '#ffffff' : color, lineWidth: Number($('#brushSize').value) * (tool === 'marker' ? 3 : 1), opacity: tool === 'eraser' ? 1 : Number($('#sketchOpacity').value) / 100 * (tool === 'marker' ? .3 : 1), fill: $('#sketchFill').checked };
+        if (freehandTools.includes(tool)) element.points = [start];
+        else { element.start = start; element.end = start; }
+        gesture = { id: event.pointerId, tool, start, element }; paint(event);
       }
-      gesture = { id: event.pointerId, tool, start, points: [], clientX: event.clientX, clientY: event.clientY, left: viewport.scrollLeft, top: viewport.scrollTop };
       canvas.setPointerCapture(event.pointerId);
-      if (tool === 'pan') canvas.style.cursor = 'grabbing';
-      else paint(event);
     });
     canvas.addEventListener('pointermove', event => {
       if (!gesture || event.pointerId !== gesture.id) return;
       event.preventDefault();
-      if (gesture.tool === 'pan') {
-        viewport.scrollLeft = gesture.left - (event.clientX - gesture.clientX);
-        viewport.scrollTop = gesture.top - (event.clientY - gesture.clientY);
-      } else paint(event);
+      if (gesture.tool === 'move') moveGesture(event); else if (gesture.tool === 'marquee') selectMarquee(event); else paint(event);
     });
     function finish(event, cancel = false) {
       if (!gesture || (event && event.pointerId !== gesture.id)) return;
       const g = gesture;
-      if (g.tool !== 'pan') { if (cancel) restore(); else { if (event) paint(event); commit(); } }
-      gesture = null;
+      if (g.tool === 'move') {
+        if (cancel) resetMove(g);
+        else {
+          if (event) moveGesture(event);
+          if (g.items.some(item => item.target.x !== item.x || item.target.y !== item.y)) commit();
+        }
+      } else if (g.tool === 'marquee') {
+        if (cancel) setSelection(g.previous); else if (event) selectMarquee(event);
+      } else if (!cancel) { if (event) paint(event); elements.push(g.element); commit(); }
+      gesture = null; renderDrawing();
       if (canvas.hasPointerCapture(g.id)) canvas.releasePointerCapture(g.id);
-      canvas.style.cursor = tool === 'pan' ? 'grab' : tool === 'text' ? 'text' : 'crosshair';
+      canvas.style.cursor = tool === 'move' ? 'grab' : tool === 'select' ? 'default' : tool === 'text' ? 'text' : 'crosshair';
     }
     canvas.addEventListener('pointerup', event => finish(event));
     canvas.addEventListener('pointercancel', event => finish(event, true));
     canvas.addEventListener('lostpointercapture', event => finish(event, true));
     dialog.addEventListener('close', () => { finish(null, true); finishTextDrag(null, true); finishTextEdit(); });
     dialog.addEventListener('keydown', event => {
-      if (event.target.matches('input, textarea, select')) return;
+      if (event.target.matches('input, textarea, select') || event.target.isContentEditable || event.isComposing) return;
+      if (!event.ctrlKey && !event.metaKey && !event.altKey && ['g', 'v'].includes(event.key.toLowerCase())) {
+        event.preventDefault(); setTool(event.key.toLowerCase() === 'g' ? 'move' : 'select'); return;
+      }
+      if (gesture || textDrag) {
+        if (event.key === 'Escape') { event.preventDefault(); finish(null, true); finishTextDrag(null, true); }
+        return;
+      }
+      if (['move', 'select'].includes(tool) && event.key === 'Escape' && selectedIds.size) {
+        event.preventDefault(); setSelection([]); return;
+      }
+      if (['move', 'select'].includes(tool) && !loading && !event.ctrlKey && !event.metaKey && !event.altKey && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) {
+        const items = captureSelection();
+        if (items.length) {
+          event.preventDefault(); const amount = event.shiftKey ? 10 : 1;
+          moveItems(items, event.key === 'ArrowLeft' ? -amount : event.key === 'ArrowRight' ? amount : 0, event.key === 'ArrowUp' ? -amount : event.key === 'ArrowDown' ? amount : 0);
+          if (items.some(item => item.target.x !== item.x || item.target.y !== item.y)) commit();
+        }
+        return;
+      }
       if ((event.ctrlKey || event.metaKey) && ['z', 'y'].includes(event.key.toLowerCase())) {
         event.preventDefault(); undo(event.key.toLowerCase() === 'y' || event.shiftKey ? 1 : -1);
       }
     });
+    $('[data-tool="select"]').title = 'Select (V)';
+    $('[data-tool="select"]').setAttribute('aria-keyshortcuts', 'v');
+    $('[data-tool="move"]').title = 'Move (G)';
+    $('[data-tool="move"]').setAttribute('aria-keyshortcuts', 'g');
     dialog.querySelectorAll('[data-tool]').forEach(button => button.onclick = () => setTool(button.dataset.tool));
     dialog.querySelectorAll('[data-colour]').forEach(button => button.onclick = () => { setColor(button.dataset.colour); changeSelectedText(box => { box.color = color; }); });
     $('#sketchColor').oninput = event => setColor(event.target.value);
@@ -364,17 +546,17 @@
     $('#sketchGrid').onchange = event => { $('.sketch-grid').hidden = !event.target.checked; };
     $('#sketchSnap').onchange = event => { if (event.target.checked) { $('#sketchGrid').checked = true; $('.sketch-grid').hidden = false; } };
     $('#sketchUndo').onclick = () => undo(-1); $('#sketchRedo').onclick = () => undo(1);
-    $('#clearSketch').onclick = () => { if (loading) return; finishTextEdit(); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, width, height); textBoxes = []; selectedText = null; renderTextBoxes(); commit(); $('#sketchMessage').textContent = 'Canvas cleared. Use Undo to restore your sketch.'; };
+    $('#clearSketch').onclick = () => { if (loading || gesture || textDrag) return; finishTextEdit(); elements = []; textBoxes = []; selectedText = null; selectedIds.clear(); renderDrawing(); renderTextBoxes(); commit(); $('#sketchMessage').textContent = 'Canvas cleared. Use Undo to restore your sketch.'; };
     $('#zoomIn').onclick = () => setZoom(zoom + .25); $('#zoomOut').onclick = () => setZoom(zoom - .25);
     $('#zoomFit').onclick = () => { setZoom(1); viewport.scrollTo(0, 0); };
     $('#sketchClose').onclick = () => dialog.close();
     $('#saveSketch').onclick = () => {
-      if (loading) return;
+      if (loading || gesture || textDrag) return;
       source = exportCanvas().toDataURL('image/png');
-      onSave(source, textBoxes.length ? { version: 1, background: canvas.toDataURL('image/png'), textBoxes: cloneBoxes() } : null); dialog.close();
+      onSave(source, { version: 2, elements: cloneElements(), textBoxes: cloneBoxes() }); dialog.close();
     };
     $('#downloadSketch').onclick = () => {
-      if (loading) return;
+      if (loading || gesture || textDrag) return;
       exportCanvas().toBlob(blob => {
         if (!blob) { $('#sketchMessage').textContent = 'Could not export the sketch. Please try again.'; return; }
         const url = URL.createObjectURL(blob), link = document.createElement('a');
@@ -393,28 +575,41 @@
         const version = ++loadVersion;
         history = []; historyIndex = -1; zoom = 1;
         const documentData = source ? readDocument(brief.sketchDocument) : null;
-        textBoxes = documentData ? documentData.textBoxes : []; selectedText = null;
-        textBoxes.forEach(constrainBox); renderTextBoxes();
-        ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, width, height);
+        elements = documentData?.elements || []; imageCache.clear();
+        textBoxes = documentData ? documentData.textBoxes : []; selectedText = null; selectedIds.clear();
+        textBoxes.forEach(constrainBox); renderTextBoxes(); renderDrawing();
         loading = !!source;
         $('#saveSketch').disabled = $('#downloadSketch').disabled = $('#clearSketch').disabled = loading;
         $('#sketchMessage').textContent = loading ? 'Opening your saved sketch...' : 'Use this sketch to attach it to your brief.';
-        const ready = () => { loading = false; commit(); $('#saveSketch').disabled = $('#downloadSketch').disabled = $('#clearSketch').disabled = false; };
+        const ready = () => { renderDrawing(); loading = false; commit(); $('#saveSketch').disabled = $('#downloadSketch').disabled = $('#clearSketch').disabled = false; };
+        const decode = data => new Promise((resolve, reject) => {
+          const image = new Image(); image.onload = () => resolve(image); image.onerror = reject; image.src = data;
+        });
+        const loadImageLayer = async data => {
+          const image = await decode(data);
+          if (version !== loadVersion) return;
+          const scale = Math.min(width / image.width, height / image.height), w = image.width * scale, h = image.height * scale;
+          imageCache.set(data, image);
+          elements = [{ id: crypto.randomUUID(), tool: 'image', x: (width - w) / 2, y: (height - h) / 2, width: w, height: h, data }];
+        };
         if (source) {
-          const image = new Image();
-          image.onload = () => {
+          (async () => {
+            let failed = false;
+            try {
+              if (documentData?.elements) {
+                await Promise.all(elements.filter(element => element.tool === 'image').map(async element => {
+                  const image = await decode(element.data);
+                  if (version === loadVersion) imageCache.set(element.data, image);
+                }));
+              } else await loadImageLayer(documentData?.background || source);
+            } catch {
+              if (version !== loadVersion) return;
+              elements = []; textBoxes = []; renderTextBoxes();
+              try { await loadImageLayer(source); } catch { failed = true; }
+            }
             if (version !== loadVersion) return;
-            const scale = Math.min(width / image.width, height / image.height);
-            const w = image.width * scale, h = image.height * scale;
-            ctx.drawImage(image, (width - w) / 2, (height - h) / 2, w, h);
-            ready(); $('#sketchMessage').textContent = 'Use this sketch to attach it to your brief.';
-          };
-          image.onerror = () => {
-            if (version !== loadVersion) return;
-            if (documentData && textBoxes.length) { textBoxes = []; renderTextBoxes(); image.src = source; return; }
-            ready(); $('#sketchMessage').textContent = 'The saved sketch could not be opened. You can draw a new one.';
-          };
-          image.src = documentData ? documentData.background : source;
+            ready(); $('#sketchMessage').textContent = failed ? 'The saved sketch could not be opened. You can draw a new one.' : 'Use this sketch to attach it to your brief.';
+          })();
         } else ready();
         updateHistory(); layout(); viewport.scrollTo(0, 0);
       },

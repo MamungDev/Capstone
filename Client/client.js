@@ -1,34 +1,46 @@
 // Drafts stay in this browser; submitted snapshots are saved to the client account.
-(() => {
+(async () => {
   const storageKey = 'capstone-client-brief-v1:' + window.CLIENT_SESSION.id;
   const defaults = {
     flowVersion: 2, step: 1, submitted: false,
     projectName: '', projectType: 'Poster', idea: '',
     audience: '', goal: '', tags: [], format: 'Poster · 4:5',
     style: 'Hand-crafted', energy: 'Warm & rich',
-    reference: null, referenceName: '', sketch: null, sketchDocument: null,
+    references: [],
     submissionId: null, pendingId: null, pendingSignature: null, accessCode: null
   };
   let stored = {};
   let loadWarning = '';
+  const newId = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
   try {
-    const raw = localStorage.getItem(storageKey);
-    const parsed = raw ? JSON.parse(raw) : {};
+    const persisted = await window.clientDraftStore.load(storageKey);
+    const raw = persisted ? null : localStorage.getItem(storageKey);
+    const parsed = persisted || (raw ? JSON.parse(raw) : {});
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) stored = parsed;
   } catch {
     loadWarning = 'Your saved draft could not be read. You can still work in this session.';
+    try { stored = JSON.parse(localStorage.getItem(storageKey) || '{}'); } catch { stored = {}; }
   }
   function normalizeBrief(stored) {
+    if (!stored || typeof stored !== 'object' || Array.isArray(stored)) stored = {};
     let brief = { ...defaults, ...stored };
-    for (const key of ['projectName', 'projectType', 'idea', 'audience', 'goal', 'format', 'style', 'energy', 'referenceName']) {
+    for (const key of ['projectName', 'projectType', 'idea', 'audience', 'goal', 'format', 'style', 'energy']) {
       if (typeof brief[key] !== 'string') brief[key] = defaults[key];
     }
     brief.tags = Array.isArray(brief.tags) ? brief.tags.filter(tag => typeof tag === 'string') : [];
     brief.step = [1, 2, 3, 4].includes(brief.step) ? brief.step : 1;
     brief.submitted = brief.submitted === true && /^[a-f0-9]{32}$/.test(brief.submissionId || '');
-    for (const key of ['reference', 'sketch']) {
-      if (typeof brief[key] !== 'string' || !/^data:image\/(png|jpeg|webp|gif);base64,/.test(brief[key])) brief[key] = null;
-    }
+    const validImage = value => typeof value === 'string' && /^data:image\/(png|jpeg|webp|gif);base64,/.test(value);
+    const legacy = [];
+    if (validImage(stored.reference)) legacy.push({ kind: 'reference', name: stored.referenceName || 'Reference', data: stored.reference });
+    if (validImage(stored.sketch)) legacy.push({ kind: 'sketch', name: 'Sketch 1', data: stored.sketch, sketchDocument: stored.sketchDocument });
+    const ids = new Set();
+    brief.references = (Array.isArray(stored.references) ? stored.references : legacy)
+      .filter(item => item && validImage(item.data)).map(item => {
+        const id = /^[a-f0-9]{32}$/.test(item.id || '') && !ids.has(item.id) ? item.id : newId(); ids.add(id);
+        return { id, name: typeof item.name === 'string' ? item.name.slice(0, 255) : 'Reference', kind: item.kind === 'sketch' ? 'sketch' : 'reference', data: item.data, sketchDocument: item.kind === 'sketch' ? item.sketchDocument : null };
+      });
+    for (const key of ['reference', 'referenceName', 'sketch', 'sketchDocument']) delete brief[key];
     // Repair only known option values from the previous encoding bug.
     const formatMatch = /^(Poster|Square|Wide|Portrait).* (4:5|1:1|16:9|A4)$/.exec(brief.format);
     brief.format = formatMatch ? `${formatMatch[1]} \u00b7 ${formatMatch[2]}` : defaults.format;
@@ -40,6 +52,7 @@
   let brief = normalizeBrief(stored);
   let renderedStep = null;
   let submitting = false;
+  let addingReferences = false;
 
   const app = document.querySelector('#app');
   const toast = document.querySelector('#toast');
@@ -49,12 +62,17 @@
 
   
 
-  const save = () => {
+  let saveRevision = 0;
+  const save = async () => {
+    const revision = ++saveRevision;
     try {
-      localStorage.setItem(storageKey, JSON.stringify(brief));
-      saved.textContent = brief.submitted ? 'Brief submitted' : 'Draft saved';
+      saved.textContent = 'Saving draft…';
+      await window.clientDraftStore.save(storageKey, brief);
+      try { localStorage.removeItem(storageKey); } catch { /* Migration already saved safely. */ }
+      if (revision === saveRevision) saved.textContent = brief.submitted ? 'Brief submitted' : 'Draft saved';
       return true;
     } catch {
+      if (revision !== saveRevision) return false;
       saved.textContent = 'Not saved';
       say('Browser storage is full or unavailable. Keep this page open; your latest changes are only in this session.');
       return false;
@@ -97,9 +115,9 @@
   }
 
   function bindFooter(backStep, next) {
-    document.querySelector('#backButton').onclick = () => {
+    document.querySelector('#backButton').onclick = async () => {
       if (submitting) return;
-      if (!backStep) { if (save()) location.href = '../index.php'; return; }
+      if (!backStep) { if (await save()) location.href = '../index.php'; return; }
       brief.step = backStep; save(); render();
     };
     document.querySelector('#nextButton').onclick = next;
@@ -169,38 +187,80 @@
     bindFooter(1, () => { brief.step = 3; save(); render(); });
   }
 
+  function referenceGallery(editable = false) {
+    if (!brief.references.length) return '<p class="subtle">No references added yet. Images and sketches will appear here.</p>';
+    return '<div class="reference-gallery">' + brief.references.map(item => `<figure class="reference-item">
+      <a href="${escape(item.data)}" download="${escape(item.name)}"><img src="${escape(item.data)}" alt="${escape(item.name)}" loading="lazy"></a>
+      <figcaption><strong>${escape(item.name)}</strong><span>${item.kind === 'sketch' ? 'Sketch' : 'Image'}</span></figcaption>
+      <div class="reference-actions"><a class="small" href="${escape(item.data)}" download="${escape(item.name)}">Download</a>${editable ? `${item.kind === 'sketch' ? `<button class="small" data-edit-reference="${item.id}" type="button">Edit sketch</button>` : ''}<button class="small" data-remove-reference="${item.id}" type="button" aria-label="Remove ${escape(item.name)}">Remove</button>` : ''}</div>
+    </figure>`).join('') + '</div>';
+  }
+
   function renderReferences() {
     app.innerHTML = `
-      <div class="eyebrow">Step 03 — visual reference</div>
+      <div class="eyebrow">Step 03 ? visual references</div>
       <h1>Give your idea <em>a point of view.</em></h1>
-      <p class="intro">An image or a rough sketch can help make your direction unmistakably yours. This step is optional.</p>
+      <p class="intro">Collect images and sketches that explain your idea. Add as many references as you need.</p>
       <div class="source-summary"><div><strong>${escape(brief.projectName || 'Untitled project')}</strong><div>${escape(brief.idea || 'No description yet')}</div></div><button class="summary-link" id="editDescribe">Edit description</button></div>
-      <section class="card sources"><div class="row"><div><h2>Add a visual starting point</h2><p>Use an image you love—or sketch the feeling in seconds.</p></div><span class="hint">Optional</span></div>
+      <section class="card sources"><div class="row"><div><h2>Add visual references</h2><p>Combine photos, moodboards, textures, and your own sketches.</p></div><span class="hint">Optional</span></div>
         <div class="sourcegrid">
-          <div class="source"><div><div class="icon">&uarr;</div><h3>Upload an image</h3><p>Photo, moodboard, texture, or an existing design.</p></div><label><input id="file" type="file" accept="image/*" hidden><button type="button" id="upload">Choose a file</button></label>${brief.reference ? `<div class="file">✓ ${escape(brief.referenceName)}</div>` : ''}</div>
-          <div class="source"><div><div class="icon">✎</div><h3>Draw a quick sketch</h3><p>Rough shapes are perfect. You can refine it later.</p></div><button type="button" id="draw">${brief.sketch ? 'Edit sketch' : 'Open sketchpad'}</button>${brief.sketch ? '<div class="file">✓ Sketch added</div>' : ''}</div>
+          <div class="source"><div><div class="icon">&uarr;</div><h3>Upload images</h3><p>Select several files at once, or keep adding more. PNG, JPEG, WebP, or GIF; up to 2 MB each.</p></div><input id="file" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden><button type="button" id="upload" ${addingReferences ? 'disabled' : ''}>${addingReferences ? 'Adding images?' : 'Choose images'}</button></div>
+          <div class="source"><div><div class="icon">?</div><h3>Add a sketch</h3><p>Draw another idea without replacing your other references.</p></div><button type="button" id="draw">Open sketchpad</button></div>
         </div>
       </section>
+      <section class="card reference-collection"><div class="row"><h2>Your references</h2><div class="reference-collection-actions"><span class="hint">${brief.references.length} added</span>${brief.references.length ? `<button class="small" id="removeAllReferences" type="button" ${addingReferences ? 'disabled' : ''}>Remove all</button>` : ''}</div></div>${referenceGallery(true)}</section>
       ${footer(2, 'Continue to review')}`;
     document.querySelector('#editDescribe').onclick = () => { brief.step = 1; save(); render(); };
     document.querySelector('#upload').onclick = () => document.querySelector('#file').click();
     document.querySelector('#file').onchange = handleFile;
-    document.querySelector('#draw').onclick = openSketch;
-    bindFooter(2, () => { brief.step = 4; save(); render(); });
+    document.querySelector('#draw').onclick = () => openSketch();
+    const removeAll = document.querySelector('#removeAllReferences');
+    if (removeAll) removeAll.onclick = () => {
+      if (addingReferences || !brief.references.length) return;
+      if (!confirm(`Remove all ${brief.references.length} references from this draft, including sketches?`)) return;
+      brief.references = [];
+      activeSketch = null;
+      sketchOwner = null;
+      save(); render(); say('All references removed.');
+    };
+    app.querySelectorAll('[data-remove-reference]').forEach(button => button.onclick = () => {
+      brief.references = brief.references.filter(item => item.id !== button.dataset.removeReference);
+      save(); render(); say('Reference removed.');
+    });
+    app.querySelectorAll('[data-edit-reference]').forEach(button => button.onclick = () => openSketch(button.dataset.editReference));
+    bindFooter(2, () => { if (addingReferences) return say('Please wait for your images to finish loading.'); brief.step = 4; save(); render(); });
   }
 
-  function handleFile(event) {
-    const image = event.target.files[0];
-    if (!image) return;
-    if (!['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(image.type)) return say('Choose a PNG, JPEG, WebP, or GIF image.');
-    if (image.size > 2 * 1024 * 1024) return say('Choose an image smaller than 2 MB so your draft can be saved.');
-    const reader = new FileReader();
-    reader.onerror = () => say('This image could not be read. Please try another file.');
-    reader.onload = () => {
-      brief.reference = reader.result; brief.referenceName = image.name; brief.sketch = null; brief.sketchDocument = null;
-      const persisted = save(); render(); if (persisted) say('Reference added.');
-    };
-    reader.readAsDataURL(image);
+  async function handleFile(event) {
+    const files = Array.from(event.target.files || []);
+    if (!files.length || addingReferences) return;
+    const targetBrief = brief;
+    addingReferences = true; render();
+    let added = 0; const errors = [];
+    try {
+      for (const image of files) {
+        if (brief !== targetBrief) break;
+        if (!['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(image.type)) { errors.push(image.name + ': unsupported image type'); continue; }
+        if (image.size > 2 * 1024 * 1024) { errors.push(image.name + ': larger than 2 MB'); continue; }
+        try {
+          const data = await new Promise((resolve, reject) => {
+            const reader = new FileReader(); reader.onerror = reject; reader.onload = () => resolve(reader.result); reader.readAsDataURL(image);
+          });
+          await new Promise((resolve, reject) => {
+            const preview = new Image(); preview.onload = () => preview.width * preview.height <= 40000000 ? resolve() : reject(); preview.onerror = reject; preview.src = data;
+          });
+          if (brief !== targetBrief) break;
+          brief.references = [...brief.references, { id: newId(), kind: 'reference', name: image.name.slice(0, 255), data }]; added++;
+        } catch { errors.push(image.name + ': could not read this image'); }
+      }
+    } finally {
+      addingReferences = false;
+      if (brief === targetBrief) {
+        const persisted = await save(); render();
+        if (errors.length) say(added + ' added. ' + errors.join('; '));
+        else if (persisted) say(added + (added === 1 ? ' reference added.' : ' references added.'));
+      }
+    }
   }
 
   function renderReview() {
@@ -208,12 +268,12 @@
       brief.accessCode = Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
       save();
     }
-    const visual = brief.reference || brief.sketch;
+
     app.innerHTML = `
       <div class="eyebrow">Step 04 — review your brief</div>
       <h1>Your brief is <em>taking shape.</em></h1>
       <p class="intro">Review the essentials and submit when it feels right.</p>
-      <section class="review"><div class="card"><div class="summary"><strong>Project</strong><div>${escape(brief.projectName)}</div></div><div class="summary"><strong>Idea</strong><div>${escape(brief.idea)}</div></div><div class="summary"><strong>Audience & goal</strong><div>${escape(brief.audience || 'Not specified')} · ${escape(brief.goal || 'Not specified')}</div></div><div class="summary"><strong>Direction</strong><div>${escape(brief.style)} · ${escape(brief.energy)} · ${escape(brief.format)}</div></div><div class="summary"><strong>Keywords</strong><div>${brief.tags.length ? brief.tags.map(tag => `<span class="chip on" style="display:inline-block;margin:0 5px 5px 0">${escape(tag)}</span>`).join('') : 'No keywords selected'}</div></div></div><div class="card"><div class="preview">${visual ? `<img src="${escape(visual)}" alt="Your visual reference">` : '<div>No visual reference yet<br><span class="subtle">Your written direction will lead.</span></div>'}</div><div class="summary" style="padding-bottom:0"><strong>Visual reference</strong><div>${visual ? escape(brief.referenceName || 'Your sketch') : 'None added'}</div></div></div></section>
+      <section class="review"><div class="card"><div class="summary"><strong>Project</strong><div>${escape(brief.projectName)}</div></div><div class="summary"><strong>Idea</strong><div>${escape(brief.idea)}</div></div><div class="summary"><strong>Audience & goal</strong><div>${escape(brief.audience || 'Not specified')} · ${escape(brief.goal || 'Not specified')}</div></div><div class="summary"><strong>Direction</strong><div>${escape(brief.style)} · ${escape(brief.energy)} · ${escape(brief.format)}</div></div><div class="summary"><strong>Keywords</strong><div>${brief.tags.length ? brief.tags.map(tag => `<span class="chip on" style="display:inline-block;margin:0 5px 5px 0">${escape(tag)}</span>`).join('') : 'No keywords selected'}</div></div></div><div class="card"><h2>Visual references (${brief.references.length})</h2>${referenceGallery()}</div></section>
       <section class="card private-code"><h2>Private project code</h2><p class="subtle">After submitting, share this code only with your chosen artist. They must enter it to receive your brief and references.</p><label for="accessCode">Your unique code</label><div class="code-actions"><input id="accessCode" readonly value="${escape(brief.accessCode)}" spellcheck="false"><button class="small" type="button" id="copyCode">Copy code</button></div><p class="subtle">You can find this code again in My briefs.</p></section>
       <p id="submissionStatus" role="status" aria-live="polite"></p>
       ${footer(3, 'Submit brief')}`;
@@ -224,6 +284,7 @@
     };
     bindFooter(3, async () => {
       if (submitting) return;
+      if (addingReferences) return say('Please wait for your images to finish loading.');
       if (!brief.projectName.trim() || !brief.idea.trim()) {
         brief.step = 1; save(); render();
         say('Add a project name and description before saving your brief.');
@@ -239,30 +300,44 @@
       status.textContent = 'Saving your brief to your account…';
       status.style.color = '';
       app.setAttribute('aria-busy', 'true');
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 45000);
+      const post = async (url, body) => {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 45000);
+        try {
+          const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal, body: JSON.stringify(body) });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok || !result.ok) throw new Error(result.error || 'Your brief could not be saved. Please try again.');
+          return result;
+        } finally { clearTimeout(timeout); }
+      };
       try {
         const snapshot = {};
         snapshot.accessCode = brief.accessCode;
-        for (const key of ['projectName', 'projectType', 'idea', 'audience', 'goal', 'format', 'style', 'energy', 'tags', 'referenceName', 'reference', 'sketch']) snapshot[key] = brief[key];
+        for (const key of ['projectName', 'projectType', 'idea', 'audience', 'goal', 'format', 'style', 'energy', 'tags']) snapshot[key] = brief[key];
+        snapshot.references = [];
+        for (const [index, reference] of brief.references.entries()) {
+          status.textContent = `Uploading reference ${index + 1} of ${brief.references.length}: ${reference.name}`;
+          const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify([window.CLIENT_SESSION.id, reference.id, reference.name, reference.kind, reference.data])));
+          const id = Array.from(new Uint8Array(digest).slice(0, 16), byte => byte.toString(16).padStart(2, '0')).join('');
+          const result = await post('upload-reference.php', { csrf: window.CLIENT_SESSION.csrf, id, name: reference.name, kind: reference.kind, data: reference.data });
+          if (result.id !== id) throw new Error('A reference could not be confirmed. Please retry.');
+          snapshot.references.push(id);
+        }
+        status.textContent = 'Saving your brief and references to your account…';
         const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(snapshot)));
         const signature = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
         if (brief.pendingSignature !== signature || !/^[a-f0-9]{32}$/.test(brief.pendingId || '')) {
           brief.pendingId = Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
           brief.pendingSignature = signature;
         }
-        save();
-        const response = await fetch('submit-brief.php', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
-          body: JSON.stringify({ csrf: window.CLIENT_SESSION.csrf, submissionId: brief.pendingId, brief: snapshot }),
-        });
-        const result = await response.json().catch(() => ({}));
-        if (!response.ok || !result.ok || !/^[a-f0-9]{32}$/.test(result.id || '')) {
+        await save();
+        const result = await post('submit-brief.php', { csrf: window.CLIENT_SESSION.csrf, submissionId: brief.pendingId, brief: snapshot });
+        if (!/^[a-f0-9]{32}$/.test(result.id || '')) {
           throw new Error(result.error || 'Your brief could not be saved. Please try again.');
         }
         brief.submissionId = result.id;
         brief.submitted = true;
-        save();
+        await save();
         render();
         app.focus({ preventScroll: true });
         window.scrollTo({ top: 0, behavior: 'instant' });
@@ -275,7 +350,6 @@
         document.querySelector('#backButton').disabled = false;
         button.textContent = 'Retry submission';
       } finally {
-        clearTimeout(timeout);
         submitting = false;
         app.removeAttribute('aria-busy');
       }
@@ -287,7 +361,7 @@
     app.innerHTML = `<section class="success"><div class="successmark" aria-hidden="true">&#10003;</div>
       <div class="eyebrow">Brief submitted</div>
       <h1>Your idea is <em>ready to share.</em></h1>
-      <p>Your creative brief and any visual reference are saved to your account. You can reopen them from My briefs.</p>
+      <p>Your creative brief and all its visual references are saved to your account. You can reopen them from My briefs.</p>
       <p class="subtle submission-id">Submission ID: ${escape(brief.submissionId)}</p>
       <div class="success-actions"><a class="continue" href="submitted.php?id=${escape(brief.submissionId)}">View submitted brief</a>
       <button class="continue" id="newBrief">Create another brief</button></div></section>`;
@@ -336,14 +410,29 @@
     }
   };
 
+  let activeSketch = null;
+  let sketchOwner = null;
   const sketchpad = window.createClientSketchpad({
     getName: () => brief.projectName,
-    onSave: (image, documentData) => {
-      brief.sketch = image; brief.sketchDocument = documentData; brief.reference = null; brief.referenceName = '';
-      const persisted = save(); render(); if (persisted) say('Sketch added.');
+    onSave: async (image, documentData) => {
+      if (!activeSketch || sketchOwner !== brief) return;
+      const existing = brief.references.find(item => item.id === activeSketch.id);
+      const item = { id: activeSketch.id, kind: 'sketch', name: existing?.name || 'Sketch ' + (brief.references.filter(item => item.kind === 'sketch').length + 1) + '.png', data: image, sketchDocument: documentData };
+      brief.references = existing ? brief.references.map(reference => reference.id === item.id ? item : reference) : [...brief.references, item];
+      activeSketch.sketch = image; activeSketch.sketchDocument = documentData;
+      const persisted = await save(); render(); if (persisted) say(existing ? 'Sketch updated.' : 'Sketch added.');
     },
   });
-  function openSketch() { sketchpad.open(brief); }
+  function openSketch(id = null) {
+    const existing = id && brief.references.find(item => item.id === id && item.kind === 'sketch');
+    if (id && !existing) return;
+    if (existing) {
+      if (!activeSketch || activeSketch.id !== id || sketchOwner !== brief) activeSketch = { id, sketch: existing.data, sketchDocument: existing.sketchDocument };
+    } else if (!activeSketch || sketchOwner !== brief || brief.references.some(item => item.id === activeSketch.id)) {
+      activeSketch = { id: newId(), sketch: null, sketchDocument: null };
+    }
+    sketchOwner = brief; sketchpad.open(activeSketch);
+  }
 
   render();
   if (loadWarning) { saved.textContent = 'Not saved'; say(loadWarning); }

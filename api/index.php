@@ -24,6 +24,7 @@ $pages = [
     '/Client/Client UI.php' => 'Client/Client UI.php',
     '/Client/submitted.php' => 'Client/submitted.php',
     '/Client/submit-brief.php' => 'Client/submit-brief.php',
+    '/Client/upload-reference.php' => 'Client/upload-reference.php',
     '/Client/brief-image.php' => 'Client/brief-image.php',
     '/Client/profile.php' => 'Client/profile.php',
     '/Client/profile-photo.php' => 'Client/profile-photo.php',
@@ -49,6 +50,8 @@ $assets = [
     '/assets/js/profile.js' => ['assets/js/profile.js', 'text/javascript'],
     '/Client/client.css' => ['Client/client.css', 'text/css'],
     '/Client/client.js' => ['Client/client.js', 'text/javascript'],
+    '/Client/draft-store.js' => ['Client/draft-store.js', 'text/javascript'],
+    '/Client/sketchpad.js' => ['Client/sketchpad.js', 'text/javascript'],
     '/Artist/artist.css' => ['Artist/artist.css', 'text/css'],
     '/Admin/admin.css' => ['Admin/admin.css', 'text/css'],
 ];

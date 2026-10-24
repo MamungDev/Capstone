@@ -7,21 +7,23 @@ if ($artist['role'] !== 'artist') json_response(['error' => 'Artist access requi
 $id = $_GET['id'] ?? '';
 if (!is_string($id) || !preg_match('/^[a-f0-9]{32}$/D', $id)) json_response(['error' => 'Reference not found.'], 404);
 try {
-    require_once __DIR__ . '/../auth/brief-access.php';
-    $query = db()->prepare('SELECT visual_mime, visual_data FROM client_briefs b JOIN brief_artist_access a ON a.brief_id = b.id WHERE b.id = ? AND a.artist_id = ?');
-    $query->execute([$id, $artist['id']]);
+    require_once __DIR__ . '/../auth/brief-references.php';
+    $referenceId = $_GET['reference'] ?? null;
+    if ($referenceId !== null && (!is_string($referenceId) || !preg_match('/^[a-f0-9]{32}$/D', $referenceId))) json_response(['error' => 'Reference not found.'], 404);
+    // Authorization is part of both queries, including direct attachment URLs.
+    $access = ' JOIN brief_artist_access a ON a.brief_id = b.id WHERE b.id = ? AND a.artist_id = ?';
+    $query = db()->prepare('SELECT r.mime AS visual_mime, r.image_data AS visual_data FROM client_brief_references r JOIN client_briefs b ON b.id = r.brief_id' . $access . ($referenceId !== null ? ' AND r.id = ?' : '') . ' ORDER BY r.position, r.id LIMIT 1');
+    $params = [$id, $artist['id']];
+    if ($referenceId !== null) $params[] = $referenceId;
+    $query->execute($params);
     $row = $query->fetch();
-    if (!$row || $row['visual_data'] === null) json_response(['error' => 'Reference not found.'], 404);
-    $extensions = ['image/png' => 'png', 'image/jpeg' => 'jpg', 'image/webp' => 'webp', 'image/gif' => 'gif'];
-    if (!isset($extensions[$row['visual_mime']])) json_response(['error' => 'Unsupported reference type.'], 415);
-    header('Content-Type: ' . $row['visual_mime']);
-    header('Cache-Control: private, no-store');
-    header('X-Content-Type-Options: nosniff');
-    header("Content-Security-Policy: default-src 'none'; sandbox");
-    if (($_GET['download'] ?? '') === '1') {
-        header('Content-Disposition: attachment; filename="reference-' . $id . '.' . $extensions[$row['visual_mime']] . '"');
+    if (!$row && $referenceId === null) {
+        $query = db()->prepare('SELECT b.visual_mime, b.visual_data FROM client_briefs b' . $access);
+        $query->execute([$id, $artist['id']]);
+        $row = $query->fetch();
     }
-    echo $row['visual_data'];
+    if (!$row || $row['visual_data'] === null) json_response(['error' => 'Reference not found.'], 404);
+    send_brief_reference($row, $referenceId ?? $id);
 } catch (PDOException $exception) {
     error_log('Artist reference error: ' . $exception->getMessage());
     json_response(['error' => 'Unable to load this reference. Please try again.'], 503);

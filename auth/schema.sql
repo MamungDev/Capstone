@@ -47,6 +47,24 @@ CREATE TABLE IF NOT EXISTS app_sessions (
   KEY app_sessions_expires (expires_at)
 ) ENGINE=InnoDB;
 
+CREATE TABLE IF NOT EXISTS client_brief_references (
+  id CHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  client_id BIGINT UNSIGNED NOT NULL,
+  brief_id CHAR(32) CHARACTER SET ascii COLLATE ascii_bin NULL,
+  position INT UNSIGNED NOT NULL DEFAULT 0,
+  name VARCHAR(255) NOT NULL,
+  kind ENUM('reference', 'sketch') NOT NULL,
+  mime VARCHAR(20) NOT NULL,
+  image_data MEDIUMBLOB NOT NULL,
+  content_hash CHAR(64) CHARACTER SET ascii NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY reference_brief_order (brief_id, position),
+  KEY reference_owner (client_id),
+  FOREIGN KEY (brief_id) REFERENCES client_briefs (id) ON DELETE CASCADE,
+  FOREIGN KEY (client_id) REFERENCES users (id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
 CREATE TABLE IF NOT EXISTS brief_access_codes (
   brief_id CHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
   access_code CHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,

@@ -41,7 +41,16 @@ foreach ($tags as $tag) {
     }
 }
 $details['tags'] = array_values(array_unique($tags));
+$referenceIds = $source['references'] ?? null;
+if ($referenceIds !== null) {
+    if (!is_array($referenceIds) || !array_is_list($referenceIds)) json_response(['error' => 'Invalid references.'], 422);
+    foreach ($referenceIds as $referenceId) {
+        if (!is_string($referenceId) || !preg_match('/^[a-f0-9]{32}$/D', $referenceId)) json_response(['error' => 'Invalid reference ID.'], 422);
+    }
+    if (count(array_unique($referenceIds)) !== count($referenceIds)) json_response(['error' => 'A reference was included twice.'], 422);
+}
 $visual = $source['reference'] ?? $source['sketch'] ?? null;
+if ($referenceIds !== null) $visual = null;
 $mime = null;
 $bytes = null;
 $details['visualKind'] = $visual === null ? null : (!empty($source['reference']) ? 'reference' : 'sketch');
@@ -63,8 +72,30 @@ try {
     require_once __DIR__ . '/../auth/brief-access.php';
     try {
         db()->beginTransaction();
+        if ($referenceIds !== null) {
+            $lookup = db()->prepare('SELECT id, brief_id, name, kind, mime, content_hash FROM client_brief_references WHERE id = ? AND client_id = ? FOR UPDATE');
+            $orderedIds = $referenceIds;
+            sort($orderedIds); // Consistent lock order for concurrent retries.
+            $references = [];
+            foreach ($orderedIds as $referenceId) {
+                $lookup->execute([$referenceId, $client['id']]);
+                $reference = $lookup->fetch();
+                if (!$reference || ($reference['brief_id'] !== null && $reference['brief_id'] !== $id)) throw new InvalidArgumentException('A reference is missing or belongs to another brief. Please upload it again.');
+                $references[$referenceId] = $reference;
+            }
+            $details['referenceCount'] = count($referenceIds);
+            $details['referenceName'] = $referenceIds ? $references[$referenceIds[0]]['name'] : '';
+            $details['visualKind'] = $referenceIds ? $references[$referenceIds[0]]['kind'] : null;
+            $mime = $referenceIds ? $references[$referenceIds[0]]['mime'] : null;
+            $json = json_encode($details, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+            $hash = hash('sha256', $json . "\0" . implode(',', array_map(static fn ($referenceId) => $referenceId . ':' . $references[$referenceId]['content_hash'], $referenceIds)) . "\0" . $accessCode);
+        }
         $insert = db()->prepare('INSERT INTO client_briefs (id, client_id, project_name, details_json, payload_hash, visual_mime, visual_data) VALUES (?, ?, ?, ?, ?, ?, ?)');
         $insert->execute([$id, $client['id'], $details['projectName'], $json, $hash, $mime, $bytes]);
+        if ($referenceIds !== null) {
+            $attach = db()->prepare('UPDATE client_brief_references SET brief_id = ?, position = ? WHERE id = ? AND client_id = ?');
+            foreach ($referenceIds as $position => $referenceId) $attach->execute([$id, $position, $referenceId, $client['id']]);
+        }
         db()->prepare('INSERT INTO brief_access_codes (brief_id, access_code) VALUES (?, ?)')->execute([$id, $accessCode]);
         db()->commit();
         $status = 201;
@@ -81,7 +112,11 @@ try {
         $status = 200;
     }
     json_response(['ok' => true, 'id' => $id, 'url' => 'submitted.php?id=' . $id], $status);
+} catch (InvalidArgumentException $exception) {
+    if (db()->inTransaction()) db()->rollBack();
+    json_response(['error' => $exception->getMessage()], 422);
 } catch (PDOException $exception) {
+    if (db()->inTransaction()) db()->rollBack();
     error_log('Brief submission error: ' . $exception->getMessage());
     json_response(['error' => 'Your brief could not be saved. Your draft is retained; please try again.'], 503);
 }

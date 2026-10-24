@@ -785,6 +785,16 @@ a:focus-visible, button:focus-visible { outline: 3px solid var(--blue); outline-
 @media (max-width: 600px) { .code-actions { flex-direction: column; align-items: stretch; } }
 
 /* Client sketch studio. Canvas pixels stay independent of the viewport. */
+.reference-collection { margin-top: 20px; }
+.reference-collection-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 12px; }
+.reference-collection-actions .small { white-space: nowrap; }
+.reference-gallery { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(210px, 100%), 1fr)); gap: 16px; }
+.reference-item { min-width: 0; margin: 0; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: #fff; }
+.reference-item img { display: block; width: 100%; height: 190px; object-fit: contain; background: #f0f3f9; }
+.reference-item figcaption { display: flex; flex-direction: column; gap: 5px; padding: 12px; font-size: 12px; overflow-wrap: anywhere; }
+.reference-item figcaption span { color: var(--muted); }
+.reference-actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 12px 12px; }
+.reference-actions a { text-decoration: none; }
 .sketch-dialog { width: 1120px; max-width: min(1120px, 96vw); color: var(--ink); }
 .sketch-modal { padding: 24px; }
 .sketch-dialog .modalhead { gap: 16px; margin-bottom: 20px; }
@@ -819,6 +829,9 @@ a:focus-visible, button:focus-visible { outline: 3px solid var(--blue); outline-
 .sketch-text-box { position: absolute; outline: 1px dashed transparent; }
 .sketch-text-layer.is-editing .sketch-text-box { pointer-events: auto; outline-color: #a7b8e3; }
 .sketch-text-layer.is-editing .sketch-text-box.is-selected { outline: 2px solid var(--blue); }
+.sketch-text-layer.is-moving .sketch-text-box.is-selected { outline: 2px solid var(--blue); }
+.sketch-selection { position: absolute; pointer-events: none; border: 1px dashed var(--blue); outline: 2px solid #ffffffb3; }
+.sketch-selection.is-marquee { background: #3158c91a; border-style: solid; }
 .sketch-text-input { display: block; width: 100%; height: 100%; min-height: 0; margin: 0; border: 0; border-radius: 0; background: transparent; font-family: Arial, sans-serif; font-weight: 600; line-height: 1.25; resize: none; overflow: auto; white-space: pre-wrap; overflow-wrap: break-word; }
 .sketch-text-input:focus { border: 0; outline: none !important; box-shadow: none; }
 .sketch-text-handles { position: absolute; left: -2px; top: -29px; display: none; height: 27px; border-radius: 5px; background: var(--blue); box-shadow: 0 2px 5px #1d2b4d22; z-index: 2; }

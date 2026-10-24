@@ -35,7 +35,7 @@ $total = 0;
 $unlockError = '';
 header('Cache-Control: private, no-store');
 try {
-    require_once __DIR__ . '/../auth/brief-access.php';
+    require_once __DIR__ . '/../auth/brief-references.php';
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_csrf($_POST['csrf'] ?? null);
         $code = is_string($_POST['access_code'] ?? null) ? strtolower(trim($_POST['access_code'])) : '';
@@ -70,6 +70,7 @@ try {
             $error = 'This brief could not be found. Return to the inbox to see the latest submissions.';
         } else {
             $details = json_decode($brief['details_json'], true, 512, JSON_THROW_ON_ERROR);
+            $references = brief_reference_list($brief, $details);
         }
     } else {
         $query = db()->prepare('SELECT COUNT(*) AS total, COALESCE(SUM(visual_mime IS NOT NULL), 0) AS visual, COUNT(DISTINCT client_id) AS clients FROM client_briefs b JOIN brief_artist_access a ON a.brief_id = b.id WHERE a.artist_id = ?');
@@ -151,9 +152,13 @@ try {
               <div><dt>Keywords</dt><dd><?php if ($details['tags']): ?><?php foreach ($details['tags'] as $tag): ?><span class="chip"><?= artist_html($tag) ?></span><?php endforeach; ?><?php else: ?>No keywords selected<?php endif; ?></dd></div>
             </dl>
           </section>
-          <section class="card"><p class="section-label">02 / Visual direction</p><div class="card-heading"><h2>Reference & inspiration</h2><?php if ($brief['visual_mime']): ?><a class="small-button" href="brief-image.php?id=<?= artist_html($id) ?>&amp;download=1">Download reference &darr;</a><?php endif; ?></div>
-            <div class="reference"><?php if ($brief['visual_mime']): ?><img src="brief-image.php?id=<?= artist_html($id) ?>" alt="Visual reference for <?= artist_html($brief['project_name']) ?>"><?php else: ?><p>This idea starts with words.<br>No visual reference was attached.</p><?php endif; ?></div>
-            <?php if ($brief['visual_mime']): ?><p class="muted reference-name"><?= artist_html($details['referenceName'] ?: 'Client sketch') ?></p><?php endif; ?>
+          <section class="card"><p class="section-label">02 / Visual direction</p><div class="card-heading"><h2>References & inspiration (<?= count($references) ?>)</h2></div>
+            <?php if (!$references): ?><div class="reference"><p>This idea starts with words.<br>No visual references were attached.</p></div><?php endif; ?>
+            <div class="reference-gallery">
+            <?php foreach ($references as $reference): $imageUrl = 'brief-image.php?id=' . $id . ($reference['id'] ? '&reference=' . $reference['id'] : ''); ?>
+              <figure class="reference-item"><a class="reference" href="<?= artist_html($imageUrl) ?>" target="_blank" rel="noopener"><img src="<?= artist_html($imageUrl) ?>" alt="<?= artist_html($reference['name']) ?>" loading="lazy"></a><figcaption><strong><?= artist_html($reference['name']) ?></strong><a class="small-button" href="<?= artist_html($imageUrl) ?>&amp;download=1">Download reference &darr;</a></figcaption></figure>
+            <?php endforeach; ?>
+            </div>
           </section>
         </div><aside>
           <section class="card client-card"><p class="section-label">Submitted by</p><span class="client-avatar" aria-hidden="true"><?= artist_html(mb_strtoupper(mb_substr($brief['client_name'], 0, 1))) ?></span><h2><?= artist_html($brief['client_name']) ?></h2><p class="muted">Client</p><hr><p class="section-label">Received</p><p class="muted"><?= artist_html(submitted_date($brief['created_at'])) ?></p></section>
@@ -193,7 +198,7 @@ try {
           <?php else: ?>
             <div class="table-wrap"><table><caption class="sr-only">Submitted client briefs</caption><thead><tr><th scope="col">Project</th><th scope="col">Client</th><th scope="col">Reference</th><th scope="col">Submitted</th><th scope="col"><span class="sr-only">Open brief</span></th></tr></thead><tbody>
             <?php foreach ($rows as $row): $rowDetails = json_decode($row['details_json'], true) ?: []; $link = inbox_url(['id' => $row['id']]); ?>
-              <tr><td><a class="project-link" href="<?= artist_html($link) ?>"><span class="file-icon" aria-hidden="true"><?= $row['visual_mime'] ? '&#9639;' : '&#8801;' ?></span><span><strong><?= artist_html($row['project_name']) ?></strong><small><?= artist_html($rowDetails['projectType'] ?? 'Creative brief') ?></small></span></a></td><td><span class="client-name"><?= artist_html($row['client_name']) ?></span></td><td><span class="reference-badge <?= $row['visual_mime'] ? 'attached' : '' ?>"><?= $row['visual_mime'] ? (($rowDetails['visualKind'] ?? '') === 'sketch' ? 'Sketch' : 'Image') : 'Written brief' ?></span></td><td class="date"><time datetime="<?= artist_html(substr($row['created_at'], 0, 10)) ?>"><?= artist_html(submitted_date($row['created_at'])) ?></time></td><td><a class="open-link" href="<?= artist_html($link) ?>" aria-label="Open <?= artist_html($row['project_name']) ?>">View &nearr;</a></td></tr>
+              <tr><td><a class="project-link" href="<?= artist_html($link) ?>"><span class="file-icon" aria-hidden="true"><?= $row['visual_mime'] ? '&#9639;' : '&#8801;' ?></span><span><strong><?= artist_html($row['project_name']) ?></strong><small><?= artist_html($rowDetails['projectType'] ?? 'Creative brief') ?></small></span></a></td><td><span class="client-name"><?= artist_html($row['client_name']) ?></span></td><td><span class="reference-badge <?= $row['visual_mime'] ? 'attached' : '' ?>"><?= $row['visual_mime'] ? (($rowDetails['referenceCount'] ?? 1) > 1 ? (int) $rowDetails['referenceCount'] . ' references' : (($rowDetails['visualKind'] ?? '') === 'sketch' ? 'Sketch' : 'Image')) : 'Written brief' ?></span></td><td class="date"><time datetime="<?= artist_html(substr($row['created_at'], 0, 10)) ?>"><?= artist_html(submitted_date($row['created_at'])) ?></time></td><td><a class="open-link" href="<?= artist_html($link) ?>" aria-label="Open <?= artist_html($row['project_name']) ?>">View &nearr;</a></td></tr>
             <?php endforeach; ?>
             </tbody></table></div>
             <nav class="pagination" aria-label="Brief pages"><span><?= ($page - 1) * 12 + 1 ?>&ndash;<?= min($page * 12, $total) ?> of <?= $total ?> briefs</span><div><?php if ($page > 1): ?><a class="small-button" href="<?= artist_html(inbox_url(['page' => $page - 1])) ?>">&larr; Previous</a><?php endif; ?><?php if ($page < $pages): ?><a class="small-button" href="<?= artist_html(inbox_url(['page' => $page + 1])) ?>">Next &rarr;</a><?php endif; ?></div></nav>

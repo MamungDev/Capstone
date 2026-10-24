@@ -11,7 +11,7 @@ $rows = [];
 $error = '';
 $page = max(1, min(100000, (int) ($_GET['page'] ?? 1)));
 try {
-    require_once __DIR__ . '/../auth/brief-access.php';
+    require_once __DIR__ . '/../auth/brief-references.php';
     if ($id !== null) {
         if (is_string($id) && preg_match('/^[a-f0-9]{32}$/D', $id)) {
             $query = db()->prepare('SELECT id, details_json, created_at, visual_mime FROM client_briefs WHERE id = ? AND client_id = ?');
@@ -24,6 +24,7 @@ try {
         } else {
             $details = json_decode($brief['details_json'], true, 512, JSON_THROW_ON_ERROR);
             $accessCode = client_brief_code($id, (int) $client['id']);
+            $references = brief_reference_list($brief, $details);
         }
     } else {
         $query = db()->prepare('SELECT id, project_name, created_at FROM client_briefs WHERE client_id = ? ORDER BY created_at DESC, id DESC LIMIT 21 OFFSET ' . (($page - 1) * 20));
@@ -86,14 +87,13 @@ try {
                 <?php endforeach; ?>
             </div>
             <div class="card">
-                <div class="preview">
-                    <?php if ($brief['visual_mime']): ?>
-                        <img src="brief-image.php?id=<?= html($brief['id']) ?>" alt="Submitted visual reference">
-                    <?php else: ?>
-                        <div>No visual reference added.<br><span class="subtle">Your written direction will lead.</span></div>
-                    <?php endif; ?>
+                <h2>Visual references (<?= count($references) ?>)</h2>
+                <?php if (!$references): ?><p class="subtle">No visual references added.</p><?php endif; ?>
+                <div class="reference-gallery">
+                <?php foreach ($references as $reference): $imageUrl = 'brief-image.php?id=' . $brief['id'] . ($reference['id'] ? '&reference=' . $reference['id'] : ''); ?>
+                    <figure class="reference-item"><a href="<?= html($imageUrl) ?>" target="_blank" rel="noopener"><img src="<?= html($imageUrl) ?>" alt="<?= html($reference['name']) ?>" loading="lazy"></a><figcaption><strong><?= html($reference['name']) ?></strong><span><?= $reference['kind'] === 'sketch' ? 'Sketch' : 'Image' ?></span></figcaption><div class="reference-actions"><a class="small" href="<?= html($imageUrl) ?>&amp;download=1">Download</a></div></figure>
+                <?php endforeach; ?>
                 </div>
-                <div class="summary"><strong>Visual reference</strong><div><?= html($brief['visual_mime'] ? ($details['referenceName'] ?: 'Your sketch') : 'None added') ?></div></div>
             </div>
         </section>
         <p class="subtle submission-id">Submission ID: <?= html($brief['id']) ?></p>

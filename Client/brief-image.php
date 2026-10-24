@@ -7,15 +7,23 @@ if ($client['role'] !== 'client') json_response(['error' => 'Client access requi
 $id = $_GET['id'] ?? '';
 if (!is_string($id) || !preg_match('/^[a-f0-9]{32}$/D', $id)) json_response(['error' => 'Image not found.'], 404);
 try {
-    $query = db()->prepare('SELECT visual_mime, visual_data FROM client_briefs WHERE id = ? AND client_id = ?');
-    $query->execute([$id, $client['id']]);
+    require_once __DIR__ . '/../auth/brief-references.php';
+    $referenceId = $_GET['reference'] ?? null;
+    if ($referenceId !== null && (!is_string($referenceId) || !preg_match('/^[a-f0-9]{32}$/D', $referenceId))) json_response(['error' => 'Reference not found.'], 404);
+    // Authorization is part of both queries, including direct attachment URLs.
+    $access = ' WHERE b.id = ? AND b.client_id = ?';
+    $query = db()->prepare('SELECT r.mime AS visual_mime, r.image_data AS visual_data FROM client_brief_references r JOIN client_briefs b ON b.id = r.brief_id' . $access . ($referenceId !== null ? ' AND r.id = ?' : '') . ' ORDER BY r.position, r.id LIMIT 1');
+    $params = [$id, $client['id']];
+    if ($referenceId !== null) $params[] = $referenceId;
+    $query->execute($params);
     $row = $query->fetch();
-    if (!$row || $row['visual_data'] === null) json_response(['error' => 'Image not found.'], 404);
-    header('Content-Type: ' . $row['visual_mime']);
-    header('Cache-Control: private, no-store');
-    header('X-Content-Type-Options: nosniff');
-    header("Content-Security-Policy: default-src 'none'; sandbox");
-    echo $row['visual_data'];
+    if (!$row && $referenceId === null) {
+        $query = db()->prepare('SELECT b.visual_mime, b.visual_data FROM client_briefs b' . $access);
+        $query->execute([$id, $client['id']]);
+        $row = $query->fetch();
+    }
+    if (!$row || $row['visual_data'] === null) json_response(['error' => 'Reference not found.'], 404);
+    send_brief_reference($row, $referenceId ?? $id);
 } catch (PDOException $exception) {
     error_log('Brief image error: ' . $exception->getMessage());
     json_response(['error' => 'Unable to load this image. Try again later.'], 503);
