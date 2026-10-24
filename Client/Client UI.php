@@ -20,6 +20,7 @@ $client = require_client_auth();
         'csrf' => csrf_token(),
         'id' => (int) $client['id'],
     ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;</script>
+    <script src="sketchpad.js?v=<?= filemtime(__DIR__ . '/sketchpad.js') ?>" defer></script>
     <script src="client.js?v=<?= filemtime(__DIR__ . '/client.js') ?>" defer></script>
     <link rel="stylesheet" href="../assets/css/dropdowns.css?v=<?= filemtime(__DIR__ . '/../assets/css/dropdowns.css') ?>">
     <script src="../assets/js/dropdowns.js?v=<?= filemtime(__DIR__ . '/../assets/js/dropdowns.js') ?>" defer></script>

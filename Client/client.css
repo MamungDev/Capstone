@@ -460,7 +460,7 @@ select {
 .preview img {
   width:100%;
   height:250px;
-  object-fit:cover
+  object-fit:contain
 }
 
 dialog {
@@ -783,3 +783,73 @@ a:focus-visible, button:focus-visible { outline: 3px solid var(--blue); outline-
 .code-actions input { flex: 1; min-width: 0; font-family: 'DM Mono', monospace; }
 .private-code input, .summary input[readonly] { box-sizing: border-box; width: 100%; padding: 14px; border: 1px solid #d7dfef; border-radius: 10px; background: #f7f8fc; color: #1d2b4d; font-family: 'DM Mono', monospace; }
 @media (max-width: 600px) { .code-actions { flex-direction: column; align-items: stretch; } }
+
+/* Client sketch studio. Canvas pixels stay independent of the viewport. */
+.sketch-dialog { width: 1120px; max-width: min(1120px, 96vw); color: var(--ink); }
+.sketch-modal { padding: 24px; }
+.sketch-dialog .modalhead { gap: 16px; margin-bottom: 20px; }
+.sketch-dialog .modalhead h2 { margin: 6px 0 8px; font-size: 25px; letter-spacing: -.04em; }
+.sketch-dialog .modalhead p { margin: 0; line-height: 1.6; color: var(--muted); }
+.sketch-dialog .x { flex: none; border-radius: 50%; }
+.sketch-eyebrow, .sketch-label { color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.sketch-eyebrow { color: var(--blue); }
+.sketch-toolbar { display: flex; flex-wrap: wrap; gap: 20px 24px; padding: 18px; border: 1px solid #e4e9f3; border-radius: 14px; background: #f7f8fc; }
+.sketch-group { display: flex; flex-direction: column; gap: 9px; min-width: 0; }
+.sketch-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.sketch-tool { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; padding: 7px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink); background: #fff; font-size: 20px; }
+.sketch-tool svg, .sketch-download svg { width: 19px; height: 19px; flex: none; }
+.sketch-tool:hover, .sketch-dialog .small:hover { border-color: #9dafde; background: #edf2ff; }
+.sketch-tool[aria-pressed="true"] { color: var(--blue); border-color: #7089ed; background: #e9eeff; box-shadow: 0 0 0 1px #7089ed; }
+.sketch-dialog button:disabled { cursor: default; opacity: .35; }
+.sketch-colors { gap: 10px; min-height: 34px; }
+.sketch-dialog .color { width: 24px; height: 24px; }
+.sketch-dialog .color.active { box-shadow: 0 0 0 2px var(--blue); }
+#sketchColor { width: 33px; height: 33px; padding: 3px; border: 1px solid var(--line); border-radius: 8px; background: #fff; cursor: pointer; }
+.sketch-settings { display: flex; align-items: center; flex-wrap: wrap; gap: 16px 22px; width: 100%; padding-top: 16px; border-top: 1px solid #e4e9f3; }
+.sketch-settings input[type="range"] { width: 120px; margin: 0; accent-color: var(--blue); }
+.sketch-label output { margin-left: 4px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.sketch-check { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #526380; font-weight: 600; }
+.sketch-check input { margin: 0; accent-color: var(--blue); width: 15px; height: 15px; }
+.sketch-zoom { margin-left: auto; }
+.sketch-text-settings { width: 100%; display: flex; align-items: center; flex-wrap: wrap; gap: 10px; font-size: 12px; color: var(--muted); }
+.sketch-text-settings label { font-size: 12px; }
+.sketch-text-settings input { border: 1px solid var(--line); border-radius: 7px; padding: 8px; color: var(--ink); background: #fff; }
+#sketchFont { width: 65px; }
+.sketch-text-layer { position: absolute; inset: 0; pointer-events: none; }
+.sketch-text-box { position: absolute; outline: 1px dashed transparent; }
+.sketch-text-layer.is-editing .sketch-text-box { pointer-events: auto; outline-color: #a7b8e3; }
+.sketch-text-layer.is-editing .sketch-text-box.is-selected { outline: 2px solid var(--blue); }
+.sketch-text-input { display: block; width: 100%; height: 100%; min-height: 0; margin: 0; border: 0; border-radius: 0; background: transparent; font-family: Arial, sans-serif; font-weight: 600; line-height: 1.25; resize: none; overflow: auto; white-space: pre-wrap; overflow-wrap: break-word; }
+.sketch-text-input:focus { border: 0; outline: none !important; box-shadow: none; }
+.sketch-text-handles { position: absolute; left: -2px; top: -29px; display: none; height: 27px; border-radius: 5px; background: var(--blue); box-shadow: 0 2px 5px #1d2b4d22; z-index: 2; }
+.sketch-text-layer.is-editing .is-selected .sketch-text-handles { display: flex; }
+.sketch-text-box.is-near-top .sketch-text-handles { top: calc(100% + 2px); }
+.sketch-text-handles button { border: 0; color: #fff; background: transparent; font-size: 12px; padding: 4px 8px; white-space: nowrap; }
+.sketch-text-move { cursor: grab; touch-action: none; user-select: none; }
+.sketch-text-move:active { cursor: grabbing; }
+.sketch-text-handles button:focus-visible { outline-color: var(--yellow); outline-offset: 1px; }
+#addTextBox { cursor: grab; }
+.sketch-workspace { margin-top: 16px; padding: 16px; height: clamp(240px, 44vh, 510px); overflow: auto; overscroll-behavior: contain; border: 1px solid var(--line); border-radius: 12px; background: #edf0f6; }
+.sketch-sheet { position: relative; margin: 0 auto; flex: none; background: #fff; box-shadow: 0 3px 14px #1d2b4d12; }
+#sketchCanvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: crosshair; }
+.sketch-grid { position: absolute; inset: 0; pointer-events: none; background-image: linear-gradient(to right, #3158c920 1px, transparent 1px), linear-gradient(to bottom, #3158c920 1px, transparent 1px); background-size: var(--grid-size) var(--grid-size); }
+.sketch-status { display: flex; justify-content: space-between; gap: 12px; margin-top: 10px; font-size: 11px; line-height: 1.5; color: var(--muted); }
+.sketch-status > :last-child { flex: none; font-variant-numeric: tabular-nums; }
+.sketch-dialog .modalactions { gap: 16px; padding-top: 16px; border-top: 1px solid #edf0f5; }
+.sketch-dialog .modalactions > .subtle { color: var(--muted); line-height: 1.6; }
+.sketch-actions { display: flex; flex-wrap: wrap; gap: 10px; flex: none; }
+.sketch-download { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 11px 14px; }
+.sketch-dialog input:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
+@media (max-width: 720px) {
+  .sketch-modal { padding: 18px; }
+  .sketch-toolbar { padding: 14px; gap: 16px; }
+  .sketch-tool { width: 36px; height: 36px; }
+  .sketch-tool-group { width: 100%; }
+  .sketch-dialog .modalactions { flex-wrap: wrap; }
+  .sketch-actions { width: 100%; }
+  .sketch-actions > button { flex: 1; }
+  .sketch-status { flex-wrap: wrap; }
+  .sketch-settings { gap: 16px; }
+  .sketch-zoom { margin-left: 0; }
+  .sketch-workspace { height: 300px; }
+}

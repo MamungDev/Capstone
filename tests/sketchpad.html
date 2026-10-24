@@ -1,0 +1,163 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Sketchpad browser regression tests</title>
+<style>body{font:14px monospace}iframe{border:0;width:1100px;height:1000px}pre{white-space:pre-wrap}</style>
+<pre id="results">RUNNING</pre>
+<iframe title="Isolated client sketchpad test"></iframe>
+<script>
+// Open this page in a browser. Uses an isolated draft ID and never submits a brief.
+const frame = document.querySelector('iframe');
+document.querySelector('#results').textContent = 'STARTED';
+frame.srcdoc = `<!doctype html><html><head><link rel="stylesheet" href="../Client/client.css">
+<script>window.CLIENT_SESSION = {id:'sketchpad-regression-test',csrf:'test'};<\/script>
+<script src="../Client/sketchpad.js" defer><\/script><script src="../Client/client.js" defer><\/script></head>
+<body><div id="saved"></div><div class="labels"><span></span><span></span><span></span><span></span></div><div id="progress"></div><main id="app"></main><div id="toast"></div><button id="reset">Reset</button><button id="logout">Logout</button></body></html>`;
+frame.onload = async () => {
+  const results = document.querySelector('#results'), passed = [];
+  const win = frame.contentWindow, doc = win.document, $ = s => doc.querySelector(s);
+  const assert = (ok, label) => { if (!ok) throw new Error(label); passed.push(label); results.textContent = `RUNNING: ${passed.length} checks\n` + passed.join('\n'); };
+  const tick = () => new Promise(resolve => setTimeout(resolve, 60));
+  try {
+    $('[data-go="3"]').click(); $('#draw').click(); await tick();
+    const canvas = $('#sketchCanvas'), ctx = canvas.getContext('2d');
+    const pixel = (x, y) => Array.from(ctx.getImageData(x, y, 1, 1).data).join(',');
+    const snapshot = () => canvas.toDataURL();
+    const white = '255,255,255,255';
+    // Synthetic pointer events do not establish browser pointer capture.
+    canvas.setPointerCapture = () => {}; canvas.hasPointerCapture = () => false;
+    const point = (type, x, y, extra = {}) => {
+      const r = canvas.getBoundingClientRect();
+      canvas.dispatchEvent(new win.PointerEvent(type, {bubbles:true, pointerId:1, button:0, clientX:r.left + x * r.width / 1200, clientY:r.top + y * r.height / 720, ...extra}));
+    };
+    const draw = (tool, x1, y1, x2, y2, extra) => {
+      $(`[data-tool="${tool}"]`).click(); point('pointerdown', x1, y1, extra); point('pointermove', x2, y2, extra); point('pointerup', x2, y2, extra);
+    };
+    const blank = snapshot();
+    assert($('#sketchUndo').disabled, 'Undo disabled on a fresh canvas');
+    assert(canvas.width === 1200 && canvas.height === 720, 'Fixed 1200 × 720 resolution');
+    assert(canvas.getBoundingClientRect().height <= $('#sketchViewport').clientHeight, 'Fit shows the entire canvas');
+    draw('pencil', 100, 100, 300, 100);
+    assert(pixel(200, 100) === '29,43,77,255', 'Pencil draws at the intended canvas coordinates');
+    const stroke = snapshot();
+    $('#sketchUndo').click(); assert(snapshot() === blank, 'Undo restores exact previous pixels');
+    $('#sketchRedo').click(); assert(snapshot() === stroke, 'Redo restores exact drawing');
+    draw('eraser', 200, 80, 200, 120); assert(pixel(200, 100) === white, 'Eraser removes drawn pixels');
+    $('#sketchUndo').click();
+    draw('marker', 100, 200, 300, 200);
+    const marker = ctx.getImageData(200, 200, 1, 1).data;
+    assert(marker[0] > 150 && marker[0] < 230, 'Marker has translucent coverage');
+    $('#sketchFill').checked = true;
+    $('[data-colour="#3158c9"]').click();
+    draw('rectangle', 400, 100, 600, 250);
+    assert(pixel(500, 180) === '49,88,201,255', 'Filled rectangle uses the selected color');
+    draw('ellipse', 650, 100, 850, 250);
+    assert(pixel(750, 175) === '49,88,201,255' && pixel(651, 101) === white, 'Ellipse fills its interior only');
+    $('#sketchFill').checked = false;
+    draw('line', 100, 300, 300, 300); assert(pixel(200, 300) === '49,88,201,255', 'Line draws a straight stroke');
+    draw('arrow', 400, 300, 600, 300); assert(pixel(590, 305) !== white, 'Arrow includes its arrowhead');
+    $('#sketchSnap').checked = true; $('#sketchSnap').dispatchEvent(new win.Event('change'));
+    draw('rectangle', 410, 410, 510, 460, {shiftKey:true});
+    assert(pixel(456, 504) !== white, 'Grid snapping and Shift create a precise square');
+    $('#sketchSnap').checked = false;
+    $('[data-tool="picker"]').click(); point('pointerdown', 500, 180);
+    assert($('#sketchColor').value === '#3158c9', 'Eyedropper samples the canvas color');
+    $('[data-tool="text"]').click();
+    const beforeText = snapshot(); point('pointerdown', 650, 350);
+    const editText = value => {
+      const input = $('.sketch-text-input'); input.focus(); input.value = value;
+      input.dispatchEvent(new win.Event('input', {bubbles:true})); input.blur();
+    };
+    editText('Logo goes here\nSecond line');
+    assert($('.sketch-text-input').value === 'Logo goes here\nSecond line', 'Text boxes support direct multiline editing');
+    assert(snapshot() === beforeText, 'Text stays editable without changing artwork underneath');
+    const textPosition = () => [$('.sketch-text-box').style.left, $('.sketch-text-box').style.top].join(',');
+    const originalPosition = textPosition();
+    const dragText = (dx, dy, cancel = false, pointerType = 'mouse') => {
+      const handle = $('.sketch-text-move'); handle.setPointerCapture = () => {}; handle.hasPointerCapture = () => false;
+      const rect = handle.getBoundingClientRect(), scale = canvas.getBoundingClientRect().width / 1200;
+      const send = (type, x, y) => handle.dispatchEvent(new win.PointerEvent(type, {bubbles:true, button:0, pointerId:2, pointerType, clientX:x, clientY:y}));
+      send('pointerdown', rect.left + 5, rect.top + 5);
+      send('pointermove', rect.left + 5 + dx * scale, rect.top + 5 + dy * scale);
+      send(cancel ? 'pointercancel' : 'pointerup', rect.left + 5 + dx * scale, rect.top + 5 + dy * scale);
+    };
+    dragText(120, 80);
+    assert(textPosition() !== originalPosition && snapshot() === beforeText, 'Dragging a text box moves it without damaging the drawing');
+    const movedPosition = textPosition();
+    $('#sketchUndo').click(); assert(textPosition() === originalPosition, 'Undo restores a text box position');
+    $('#sketchRedo').click(); assert(textPosition() === movedPosition, 'Redo restores a text box move');
+    dragText(-60, 20, true, 'touch'); assert(textPosition() === movedPosition, 'Cancelled touch dragging restores the text position');
+    $('#zoomIn').click(); dragText(-120, -80, false, 'touch');
+    const movedBack = parseFloat($('.sketch-text-box').style.left);
+    assert(Math.abs(movedBack - 650 / 1200 * 100) < .01, 'Touch dragging uses correct coordinates while zoomed');
+    $('#zoomFit').click();
+    $('.sketch-text-move').dispatchEvent(new win.KeyboardEvent('keydown', {key:'ArrowRight', shiftKey:true, bubbles:true}));
+    assert(Math.abs(parseFloat($('.sketch-text-box').style.left) - 660 / 1200 * 100) < .01, 'Move handle supports precise keyboard positioning');
+    $('[aria-label="Delete text box"]').click(); assert(!$('.sketch-text-input'), 'Selected text boxes can be deleted');
+    $('#sketchUndo').click(); assert($('.sketch-text-input').value.includes('Second line'), 'Undo restores a deleted text box and its contents');
+    $('.sketch-text-input').focus(); $('#sketchFont').value = '36'; $('#sketchFont').dispatchEvent(new win.Event('change'));
+    assert(parseFloat($('.sketch-text-input').style.fontSize) > 10, 'Selected text size can be changed');
+    const transfer = new win.DataTransfer(); transfer.setData('application/x-sketch-text', 'new');
+    const canvasRect = canvas.getBoundingClientRect();
+    $('#sketchViewport').dispatchEvent(new win.DragEvent('drop', {bubbles:true, dataTransfer:transfer, clientX:canvasRect.left + 40, clientY:canvasRect.top + 40}));
+    assert(doc.querySelectorAll('.sketch-text-input').length === 2, 'Dropping the text tool creates another editable text box');
+    doc.querySelectorAll('[aria-label="Delete text box"]')[1].click();
+    const beforeCancel = snapshot();
+    $('[data-tool="pencil"]').click(); point('pointerdown', 10, 500); point('pointermove', 500, 500); point('pointercancel', 500, 500);
+    assert(snapshot() === beforeCancel, 'Cancelled gestures leave no partial stroke');
+    $('#clearSketch').click(); assert(snapshot() === blank, 'Clear removes the entire sketch');
+    assert(!$('.sketch-text-input'), 'Clear also removes text boxes');
+    $('#sketchUndo').click(); assert(snapshot() === beforeCancel, 'Clear can be undone');
+    assert($('.sketch-text-input').value.includes('Second line'), 'Undo clear restores editable text boxes');
+    $('#zoomIn').click(); $('#zoomIn').click();
+    assert(snapshot() === beforeCancel && $('#zoomValue').value === '150%', 'Zoom preserves image pixels');
+    draw('pencil', 100, 600, 300, 600);
+    assert(pixel(200, 600) === '49,88,201,255', 'Drawing coordinates remain correct while zoomed');
+    const finalDrawing = snapshot();
+    $('#saveSketch').click();
+    const savedDraft = JSON.parse(win.localStorage.getItem('capstone-client-brief-v1:sketchpad-regression-test'));
+    const finalSketch = savedDraft.sketch;
+    assert(finalSketch !== finalDrawing && savedDraft.sketchDocument.textBoxes.length === 1, 'Saving combines text into the PNG and retains editable text in the draft');
+    $('#draw').click();
+    $('#sketchClose').click(); $('#draw').click();
+    assert(snapshot() === finalDrawing && $('.sketch-text-input').value.includes('Second line'), 'Closing and reopening retains drawing and editable text');
+    $('#zoomFit').click(); frame.style.width = '390px'; await tick();
+    assert(doc.documentElement.scrollWidth <= 390, 'Mobile layout has no horizontal page overflow');
+    assert(canvas.getBoundingClientRect().width < 390 && snapshot() === finalDrawing, 'Mobile resize preserves the drawing');
+    $('[data-tool="text"]').click(); $('.sketch-text-input').focus();
+    assert($('.sketch-text-move').getBoundingClientRect().height >= 26, 'Text move handle remains usable at mobile scale');
+    const actions = $('.sketch-actions').getBoundingClientRect();
+    assert(actions.right <= 390, 'Save and download actions fit on mobile');
+    let download, exported;
+    win.URL.createObjectURL = blob => { exported = blob; return 'blob:sketch-test'; };
+    win.URL.revokeObjectURL = () => {};
+    win.HTMLAnchorElement.prototype.click = function() { download = this.download; };
+    $('#downloadSketch').click();
+    for (let i = 0; i < 30 && !exported; i++) await tick();
+    assert(exported && exported.type === 'image/png' && download.endsWith('-sketch.png'), 'Download generates a PNG with a sketch filename');
+    const exportedUrl = await new Promise(resolve => { const reader = new win.FileReader(); reader.onload = () => resolve(reader.result); reader.readAsDataURL(exported); });
+    const bitmap = new win.Image();
+    await new Promise((resolve, reject) => { bitmap.onload = resolve; bitmap.onerror = reject; bitmap.src = exportedUrl; });
+    assert(bitmap.width === 1200 && bitmap.height === 720, 'PNG exports full resolution regardless of zoom or mobile width');
+    assert(exportedUrl === finalSketch, 'Download contains the full sketch without the alignment grid');
+    $('#saveSketch').click();
+    const draft = JSON.parse(win.localStorage.getItem('capstone-client-brief-v1:sketchpad-regression-test'));
+    assert(draft.sketch === finalSketch && draft.reference === null, 'Use this sketch saves PNG into the client draft');
+    assert($('#draw').textContent === 'Edit sketch', 'Reference panel switches to Edit sketch');
+    $('#nextButton').click();
+    assert($('.preview img').src === finalSketch, 'Review displays the attached sketch');
+    // A new editor must decode persisted PNGs, as it does after a page reload.
+    doc.querySelector('.sketch-dialog').remove();
+    const editor = win.createClientSketchpad({getName:() => 'Test', onSave:() => {}});
+    editor.open({sketch:finalSketch});
+    for (let i = 0; i < 30 && $('#saveSketch').disabled; i++) await tick();
+    assert($('#sketchCanvas').toDataURL() === finalSketch, 'Persisted sketch reopens without distortion or pixel loss');
+    $('.sketch-dialog').close();
+    editor.open(savedDraft);
+    for (let i = 0; i < 30 && $('#saveSketch').disabled; i++) await tick();
+    assert($('#sketchCanvas').toDataURL() === finalDrawing && $('.sketch-text-input').value.includes('Second line'), 'Reloaded draft restores separate artwork and editable text boxes');
+    $('.sketch-dialog').close();
+    win.localStorage.removeItem('capstone-client-brief-v1:sketchpad-regression-test');
+    results.textContent = `PASS: ${passed.length} checks\n` + passed.join('\n');
+  } catch (error) { results.textContent = `FAIL after ${passed.length} checks: ${error.message}\n` + passed.join('\n'); }
+};
+</script>

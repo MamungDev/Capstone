@@ -6,7 +6,7 @@
     projectName: '', projectType: 'Poster', idea: '',
     audience: '', goal: '', tags: [], format: 'Poster · 4:5',
     style: 'Hand-crafted', energy: 'Warm & rich',
-    reference: null, referenceName: '', sketch: null,
+    reference: null, referenceName: '', sketch: null, sketchDocument: null,
     submissionId: null, pendingId: null, pendingSignature: null, accessCode: null
   };
   let stored = {};
@@ -197,7 +197,7 @@
     const reader = new FileReader();
     reader.onerror = () => say('This image could not be read. Please try another file.');
     reader.onload = () => {
-      brief.reference = reader.result; brief.referenceName = image.name; brief.sketch = null;
+      brief.reference = reader.result; brief.referenceName = image.name; brief.sketch = null; brief.sketchDocument = null;
       const persisted = save(); render(); if (persisted) say('Reference added.');
     };
     reader.readAsDataURL(image);
@@ -336,51 +336,14 @@
     }
   };
 
-  const sketchDialog = document.createElement('dialog');
-  sketchDialog.setAttribute('aria-labelledby', 'sketch-title');
-  sketchDialog.innerHTML = `<div class="modal"><div class="modalhead"><div><h2 id="sketch-title">Sketch the feeling</h2><p class="subtle">Loose shapes and colour cues are enough.</p></div><button class="x" id="sketchClose" aria-label="Close sketchpad">×</button></div><div class="tools"><button class="color active" data-colour="#1d2b4d" style="background:#1d2b4d" aria-label="Navy pen"></button><button class="color" data-colour="#3158c9" style="background:#3158c9" aria-label="Blue pen"></button><button class="color" data-colour="#f17d67" style="background:#f17d67" aria-label="Coral pen"></button><button class="color" data-colour="#e5a72d" style="background:#e5a72d" aria-label="Yellow pen"></button><label class="subtle">Size <input id="brushSize" type="range" min="2" max="18" value="5"></label><button class="small" id="clearSketch">Clear</button></div><div class="canvaswrap"><canvas id="sketchCanvas" aria-label="Drawing canvas"></canvas></div><div class="modalactions"><span class="subtle">Your sketch will be included when you submit.</span><button class="continue" id="saveSketch">Use this sketch</button></div></div>`;
-  document.body.appendChild(sketchDialog);
-  const canvas = sketchDialog.querySelector('#sketchCanvas');
-  const context = canvas.getContext('2d');
-  let drawing = false, lastPoint, pen = '#1d2b4d';
-  const position = event => { const rect = canvas.getBoundingClientRect(); return { x: event.clientX - rect.left, y: event.clientY - rect.top }; };
-  function sizeCanvas() {
-    const rect = canvas.getBoundingClientRect();
-    const prior = brief.sketch;
-    canvas.width = rect.width * devicePixelRatio; canvas.height = rect.height * devicePixelRatio;
-    context.scale(devicePixelRatio, devicePixelRatio); context.fillStyle = '#fff'; context.fillRect(0, 0, rect.width, rect.height);
-    if (prior) { const image = new Image(); image.onload = () => context.drawImage(image, 0, 0, rect.width, rect.height); image.src = prior; }
-  }
-  function openSketch() { sketchDialog.showModal(); requestAnimationFrame(sizeCanvas); }
-  canvas.addEventListener('pointerdown', event => {
-    drawing = true; lastPoint = position(event); canvas.setPointerCapture(event.pointerId);
-    context.beginPath(); context.fillStyle = pen;
-    context.arc(lastPoint.x, lastPoint.y, Number(sketchDialog.querySelector('#brushSize').value) / 2, 0, Math.PI * 2); context.fill();
+  const sketchpad = window.createClientSketchpad({
+    getName: () => brief.projectName,
+    onSave: (image, documentData) => {
+      brief.sketch = image; brief.sketchDocument = documentData; brief.reference = null; brief.referenceName = '';
+      const persisted = save(); render(); if (persisted) say('Sketch added.');
+    },
   });
-  canvas.addEventListener('pointermove', event => {
-    if (!drawing) return;
-    event.preventDefault();
-    const point = position(event); context.beginPath(); context.strokeStyle = pen;
-    context.lineWidth = sketchDialog.querySelector('#brushSize').value; context.lineCap = 'round';
-    context.moveTo(lastPoint.x, lastPoint.y); context.lineTo(point.x, point.y); context.stroke(); lastPoint = point;
-  });
-  window.addEventListener('pointerup', () => drawing = false);
-  canvas.addEventListener('pointercancel', () => drawing = false);
-  sketchDialog.addEventListener('close', () => drawing = false);
-  sketchDialog.querySelectorAll('[data-colour]').forEach(button => button.onclick = () => {
-    pen = button.dataset.colour;
-    sketchDialog.querySelectorAll('[data-colour]').forEach(item => item.classList.remove('active'));
-    button.classList.add('active');
-  });
-  sketchDialog.querySelector('#sketchClose').onclick = () => sketchDialog.close();
-  sketchDialog.querySelector('#clearSketch').onclick = () => {
-    context.fillStyle = '#fff';
-    context.fillRect(0, 0, canvas.width, canvas.height);
-  };
-  sketchDialog.querySelector('#saveSketch').onclick = () => {
-    brief.sketch = canvas.toDataURL('image/png'); brief.reference = null; brief.referenceName = '';
-    const persisted = save(); sketchDialog.close(); render(); if (persisted) say('Sketch added.');
-  };
+  function openSketch() { sketchpad.open(brief); }
 
   render();
   if (loadWarning) { saved.textContent = 'Not saved'; say(loadWarning); }
