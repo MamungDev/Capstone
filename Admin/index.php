@@ -117,6 +117,8 @@ $pages = 1;
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&amp;family=Playfair+Display:ital,wght@0,600;1,600&amp;display=swap" rel="stylesheet">
   <link rel="stylesheet" href="../Artist/artist.css">
   <link rel="stylesheet" href="admin.css">
+  <link rel="stylesheet" href="../assets/css/dropdowns.css?v=<?= filemtime(__DIR__ . '/../assets/css/dropdowns.css') ?>">
+  <script src="../assets/js/dropdowns.js?v=<?= filemtime(__DIR__ . '/../assets/js/dropdowns.js') ?>" defer></script>
 </head>
 <body>
 <div class="shell">

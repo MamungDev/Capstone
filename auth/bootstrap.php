@@ -145,6 +145,8 @@ function ensure_database_schema(): void
         db()->query('SELECT 1 FROM app_sessions LIMIT 0');
         db()->query('SELECT 1 FROM users LIMIT 0');
         db()->query('SELECT 1 FROM client_briefs LIMIT 0');
+        db()->query('SELECT 1 FROM brief_access_codes LIMIT 0');
+        db()->query('SELECT 1 FROM brief_artist_access LIMIT 0');
         db()->query('SELECT 1 FROM admin_login_limits LIMIT 0');
         return;
     } catch (PDOException $error) {
@@ -213,7 +215,21 @@ function current_user(): ?array
     $id = $_SESSION['user_id'] ?? null;
     if (!is_int($id) || $id < 1) return null;
     try {
-        $statement = db()->prepare('SELECT id, role, email, display_name FROM users WHERE id = ? LIMIT 1');
+        $sql = 'SELECT id, role, email, display_name, bio, photo_mime, (photo_data IS NOT NULL) AS has_profile_photo FROM users WHERE id = ? LIMIT 1';
+        try {
+            $statement = db()->prepare($sql);
+        } catch (PDOException $exception) {
+            if (($exception->errorInfo[1] ?? null) !== 1054) throw $exception;
+            // Upgrade existing installations; fresh databases include these columns.
+            foreach (['bio VARCHAR(500) NULL', 'photo_mime VARCHAR(20) NULL', 'photo_data MEDIUMBLOB NULL'] as $column) {
+                try {
+                    db()->exec('ALTER TABLE users ADD COLUMN ' . $column);
+                } catch (PDOException $migrationError) {
+                    if (($migrationError->errorInfo[1] ?? null) !== 1060) throw $migrationError;
+                }
+            }
+            $statement = db()->prepare($sql);
+        }
         $statement->execute([$id]);
         $user = $statement->fetch();
         return $user ?: null;

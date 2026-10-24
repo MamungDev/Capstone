@@ -6,6 +6,9 @@ CREATE TABLE IF NOT EXISTS users (
   role ENUM('client', 'artist') NOT NULL,
   email VARCHAR(254) NOT NULL,
   display_name VARCHAR(100) NOT NULL,
+  bio VARCHAR(500) NULL,
+  photo_mime VARCHAR(20) NULL,
+  photo_data MEDIUMBLOB NULL,
   password_hash VARCHAR(255) NULL,
   google_sub VARCHAR(255) NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -42,4 +45,21 @@ CREATE TABLE IF NOT EXISTS app_sessions (
   expires_at BIGINT UNSIGNED NOT NULL,
   PRIMARY KEY (session_id),
   KEY app_sessions_expires (expires_at)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS brief_access_codes (
+  brief_id CHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  access_code CHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  PRIMARY KEY (brief_id),
+  UNIQUE KEY brief_code_unique (access_code),
+  FOREIGN KEY (brief_id) REFERENCES client_briefs (id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS brief_artist_access (
+  brief_id CHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  artist_id BIGINT UNSIGNED NOT NULL,
+  PRIMARY KEY (brief_id, artist_id),
+  KEY artist_briefs (artist_id),
+  FOREIGN KEY (brief_id) REFERENCES client_briefs (id) ON DELETE CASCADE,
+  FOREIGN KEY (artist_id) REFERENCES users (id) ON DELETE CASCADE
 ) ENGINE=InnoDB;

@@ -21,6 +21,10 @@ $id = $input['submissionId'] ?? null;
 if (!is_string($id) || !preg_match('/^[a-f0-9]{32}$/D', $id)) json_response(['error' => 'Invalid submission ID. Refresh and try again.'], 422);
 $source = $input['brief'] ?? null;
 if (!is_array($source)) json_response(['error' => 'Add your brief details.'], 422);
+$accessCode = $source['accessCode'] ?? '';
+if (!is_string($accessCode) || !preg_match('/^[a-f0-9]{32}$/D', $accessCode)) {
+    json_response(['error' => 'Refresh the review page to generate your private project code.'], 422);
+}
 $details = [];
 foreach (['projectName' => 120, 'projectType' => 80, 'idea' => 5000, 'audience' => 1000, 'goal' => 1000,
     'format' => 80, 'style' => 80, 'energy' => 80, 'referenceName' => 255] as $field => $max) {
@@ -54,13 +58,18 @@ if ($visual !== null) {
     }
 }
 $json = json_encode($details, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
-$hash = hash('sha256', $json . "\0" . ($mime ?? '') . "\0" . ($bytes ?? ''));
+$hash = hash('sha256', $json . "\0" . ($mime ?? '') . "\0" . ($bytes ?? '') . "\0" . $accessCode);
 try {
+    require_once __DIR__ . '/../auth/brief-access.php';
     try {
+        db()->beginTransaction();
         $insert = db()->prepare('INSERT INTO client_briefs (id, client_id, project_name, details_json, payload_hash, visual_mime, visual_data) VALUES (?, ?, ?, ?, ?, ?, ?)');
         $insert->execute([$id, $client['id'], $details['projectName'], $json, $hash, $mime, $bytes]);
+        db()->prepare('INSERT INTO brief_access_codes (brief_id, access_code) VALUES (?, ?)')->execute([$id, $accessCode]);
+        db()->commit();
         $status = 201;
     } catch (PDOException $exception) {
+        if (db()->inTransaction()) db()->rollBack();
         if (($exception->errorInfo[1] ?? null) !== 1062) throw $exception;
         // A lost response can be retried without creating a second brief.
         $existing = db()->prepare('SELECT payload_hash FROM client_briefs WHERE id = ? AND client_id = ?');

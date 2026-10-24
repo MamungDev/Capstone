@@ -21,6 +21,10 @@ $client = require_client_auth();
         'id' => (int) $client['id'],
     ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;</script>
     <script src="client.js?v=<?= filemtime(__DIR__ . '/client.js') ?>" defer></script>
+    <link rel="stylesheet" href="../assets/css/dropdowns.css?v=<?= filemtime(__DIR__ . '/../assets/css/dropdowns.css') ?>">
+    <script src="../assets/js/dropdowns.js?v=<?= filemtime(__DIR__ . '/../assets/js/dropdowns.js') ?>" defer></script>
+    <link rel="stylesheet" href="../assets/css/profile.css?v=<?= filemtime(__DIR__ . '/../assets/css/profile.css') ?>">
+    <script src="../assets/js/profile.js?v=<?= filemtime(__DIR__ . '/../assets/js/profile.js') ?>" defer></script>
   </head>
   <body>
     <div class="shell">
@@ -32,7 +36,7 @@ $client = require_client_auth();
           <button class="plain" id="reset" type="button">Start over</button>
           <span id="saved" role="status" title="Drafts are saved only in this browser">Draft saved</span>
           <button class="plain" id="logout" type="button">Sign out</button>
-          <div class="avatar" aria-label="Signed-in client" title="<?= htmlspecialchars($client['display_name'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?>"><?= htmlspecialchars(mb_strtoupper(mb_substr($client['display_name'], 0, 1)), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?></div>
+          <button class="avatar" id="profile-trigger" type="button" aria-label="Open your profile" aria-haspopup="dialog" aria-controls="user-profile" title="View your profile"><?php if (!empty($client['photo_mime'])): ?><img src="profile-photo.php" alt=""><?php else: ?><?= htmlspecialchars(mb_strtoupper(mb_substr($client['display_name'], 0, 1)), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?><?php endif; ?></button>
         </div>
       </nav>
       <div class="progress" id="progress" role="group" aria-label="Creative brief steps"></div>
@@ -50,5 +54,6 @@ $client = require_client_auth();
       </main>
     </div>
     <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
-  </body>
+  <?php $profileUser = $client; require __DIR__ . '/../auth/profile-panel.php'; ?>
+</body>
 </html>

@@ -7,7 +7,7 @@
     audience: '', goal: '', tags: [], format: 'Poster · 4:5',
     style: 'Hand-crafted', energy: 'Warm & rich',
     reference: null, referenceName: '', sketch: null,
-    submissionId: null, pendingId: null, pendingSignature: null
+    submissionId: null, pendingId: null, pendingSignature: null, accessCode: null
   };
   let stored = {};
   let loadWarning = '';
@@ -204,14 +204,24 @@
   }
 
   function renderReview() {
+    if (!/^[a-f0-9]{32}$/.test(brief.accessCode || '')) {
+      brief.accessCode = Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
+      save();
+    }
     const visual = brief.reference || brief.sketch;
     app.innerHTML = `
       <div class="eyebrow">Step 04 — review your brief</div>
       <h1>Your brief is <em>taking shape.</em></h1>
       <p class="intro">Review the essentials and submit when it feels right.</p>
       <section class="review"><div class="card"><div class="summary"><strong>Project</strong><div>${escape(brief.projectName)}</div></div><div class="summary"><strong>Idea</strong><div>${escape(brief.idea)}</div></div><div class="summary"><strong>Audience & goal</strong><div>${escape(brief.audience || 'Not specified')} · ${escape(brief.goal || 'Not specified')}</div></div><div class="summary"><strong>Direction</strong><div>${escape(brief.style)} · ${escape(brief.energy)} · ${escape(brief.format)}</div></div><div class="summary"><strong>Keywords</strong><div>${brief.tags.length ? brief.tags.map(tag => `<span class="chip on" style="display:inline-block;margin:0 5px 5px 0">${escape(tag)}</span>`).join('') : 'No keywords selected'}</div></div></div><div class="card"><div class="preview">${visual ? `<img src="${escape(visual)}" alt="Your visual reference">` : '<div>No visual reference yet<br><span class="subtle">Your written direction will lead.</span></div>'}</div><div class="summary" style="padding-bottom:0"><strong>Visual reference</strong><div>${visual ? escape(brief.referenceName || 'Your sketch') : 'None added'}</div></div></div></section>
+      <section class="card private-code"><h2>Private project code</h2><p class="subtle">After submitting, share this code only with your chosen artist. They must enter it to receive your brief and references.</p><label for="accessCode">Your unique code</label><div class="code-actions"><input id="accessCode" readonly value="${escape(brief.accessCode)}" spellcheck="false"><button class="small" type="button" id="copyCode">Copy code</button></div><p class="subtle">You can find this code again in My briefs.</p></section>
       <p id="submissionStatus" role="status" aria-live="polite"></p>
       ${footer(3, 'Submit brief')}`;
+    document.querySelector('#accessCode').onclick = event => event.target.select();
+    document.querySelector('#copyCode').onclick = async () => {
+      try { await navigator.clipboard.writeText(brief.accessCode); say('Project code copied.'); }
+      catch { document.querySelector('#accessCode').select(); say('Select and copy your project code.'); }
+    };
     bindFooter(3, async () => {
       if (submitting) return;
       if (!brief.projectName.trim() || !brief.idea.trim()) {
@@ -233,6 +243,7 @@
       const timeout = setTimeout(() => controller.abort(), 45000);
       try {
         const snapshot = {};
+        snapshot.accessCode = brief.accessCode;
         for (const key of ['projectName', 'projectType', 'idea', 'audience', 'goal', 'format', 'style', 'energy', 'tags', 'referenceName', 'reference', 'sketch']) snapshot[key] = brief[key];
         const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(snapshot)));
         const signature = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');

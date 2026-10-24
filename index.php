@@ -1,7 +1,10 @@
 <?php
 declare(strict_types=1);
-require_once __DIR__ . '/auth/bootstrap.php';
+require_once __DIR__ . '/auth/admin.php';
 $signedInUser = current_user();
+$adminStatus = admin_password_status();
+$adminError = $_SESSION['admin_login_error'] ?? '';
+unset($_SESSION['admin_login_error']);
 ?>
 <!doctype html>
 <html lang="en">
@@ -22,13 +25,14 @@ $signedInUser = current_user();
         'user' => $signedInUser,
     ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_INVALID_UTF8_SUBSTITUTE) ?>;</script>
     <script src="assets/js/landing.js" defer></script>
+    <script src="assets/js/admin-modal.js" defer></script>
   </head>
   <body id="home">
     <div id="landing">
       <header class="home-nav">
         <a class="home-brand" href="#home"><span aria-hidden="true">&#10022;</span>Mamungkun</a>
         <nav aria-label="Main navigation">
-          <a href="Admin/login.php">Admin</a>
+          <a href="?auth=admin" data-admin-open aria-haspopup="dialog" aria-controls="admin-modal">Admin</a>
           <a class="home-how-link" href="#how-it-works">How it works</a>
           <a class="home-button compact" href="#auth-modal" data-auth-open aria-haspopup="dialog" aria-controls="auth-modal">Open workspace</a>
         </nav>
@@ -169,6 +173,29 @@ $signedInUser = current_user();
         </div>
         <p class="auth-status" role="status" aria-live="polite" hidden></p>
         <p class="auth-note">A space for your ideas and the people who bring them to life.</p>
+        <button class="auth-cancel" type="button">Back to exploring</button>
+      </div>
+    </dialog>
+    <dialog id="admin-modal" class="auth-modal" aria-labelledby="admin-title" aria-describedby="admin-description" data-authenticated="<?= admin_authorized() ? 'true' : 'false' ?>">
+      <div class="auth-content">
+        <button class="auth-close" type="button" aria-label="Close admin sign-in dialog">&times;</button>
+        <div class="auth-brand" aria-hidden="true">&#10022;</div>
+        <p class="auth-eyebrow">MAMUNGKUN ADMINISTRATION</p>
+        <h2 id="admin-title">Welcome back.<br>A space to care.</h2>
+        <p id="admin-description">Sign in to look after your creative community.</p>
+        <form id="admin-form" class="auth-email-form" method="post" action="Admin/login.php">
+          <input type="hidden" name="csrf" value="<?= htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8') ?>">
+          <div class="auth-field">
+            <label for="admin-password">Admin password</label>
+            <input id="admin-password" name="password" type="password" autocomplete="current-password" required maxlength="4096" placeholder="Enter your admin password">
+          </div>
+          <button class="auth-submit" type="submit" <?= $adminStatus !== 'ready' ? 'disabled' : '' ?>>Sign in to admin</button>
+        </form>
+        <p class="auth-status" role="status" aria-live="polite" <?= $adminError === '' ? 'hidden' : '' ?>><?= htmlspecialchars((string) $adminError, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?></p>
+        <?php if ($adminStatus !== 'ready'): ?>
+          <p class="auth-status"><?php if ($adminStatus === 'short'): ?>The saved admin password is shorter than 16 characters. Set a longer ADMIN_PASSWORD in Vercel and redeploy.<?php else: ?>This deployment has no ADMIN_PASSWORD. Save a password of at least 16 characters for Production in Vercel, then redeploy.<?php endif; ?></p>
+        <?php endif; ?>
+        <p class="auth-note">Account management for authorized administrators.</p>
         <button class="auth-cancel" type="button">Back to exploring</button>
       </div>
     </dialog>

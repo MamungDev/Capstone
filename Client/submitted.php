@@ -11,6 +11,7 @@ $rows = [];
 $error = '';
 $page = max(1, min(100000, (int) ($_GET['page'] ?? 1)));
 try {
+    require_once __DIR__ . '/../auth/brief-access.php';
     if ($id !== null) {
         if (is_string($id) && preg_match('/^[a-f0-9]{32}$/D', $id)) {
             $query = db()->prepare('SELECT id, details_json, created_at, visual_mime FROM client_briefs WHERE id = ? AND client_id = ?');
@@ -22,6 +23,7 @@ try {
             $error = 'This brief could not be found in your account.';
         } else {
             $details = json_decode($brief['details_json'], true, 512, JSON_THROW_ON_ERROR);
+            $accessCode = client_brief_code($id, (int) $client['id']);
         }
     } else {
         $query = db()->prepare('SELECT id, project_name, created_at FROM client_briefs WHERE client_id = ? ORDER BY created_at DESC, id DESC LIMIT 21 OFFSET ' . (($page - 1) * 20));
@@ -43,6 +45,8 @@ try {
     <link rel="icon" href="../assets/mamungkun-icon.svg" type="image/svg+xml">
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&amp;family=Manrope:wght@400;600;700;800&amp;family=Playfair+Display:ital,wght@0,600;0,700;1,600&amp;display=swap" rel="stylesheet">
     <link rel="stylesheet" href="client.css?v=<?= filemtime(__DIR__ . '/client.css') ?>">
+  <link rel="stylesheet" href="../assets/css/profile.css?v=<?= filemtime(__DIR__ . '/../assets/css/profile.css') ?>">
+  <script src="../assets/js/profile.js?v=<?= filemtime(__DIR__ . '/../assets/js/profile.js') ?>" defer></script>
 </head>
 <body>
 <div class="shell">
@@ -55,6 +59,7 @@ try {
                 <input type="hidden" name="csrf" value="<?= html(csrf_token()) ?>">
                 <button class="plain" type="submit">Sign out</button>
             </form>
+            <button class="avatar" id="profile-trigger" type="button" aria-label="Open your profile" aria-haspopup="dialog" aria-controls="user-profile" title="View your profile"><?php if (!empty($client['photo_mime'])): ?><img src="profile-photo.php" alt=""><?php else: ?><?= htmlspecialchars(mb_strtoupper(mb_substr($client['display_name'], 0, 1)), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?><?php endif; ?></button>
         </div>
     </nav>
     <main class="saved-briefs">
@@ -68,6 +73,7 @@ try {
         <p class="intro">Your saved creative brief. Submitted <?= html($brief['created_at']) ?> (database time).</p>
         <section class="review">
             <div class="card">
+                <div class="summary"><strong>Private project code</strong><input aria-label="Private project code" readonly value="<?= html($accessCode) ?>" onclick="this.select()"><p class="subtle">Share this code only with your chosen artist. They must enter it in their inbox to receive this brief and its references.</p></div>
                 <?php foreach ([
                     'Project type' => $details['projectType'],
                     'Idea' => $details['idea'],
@@ -114,5 +120,6 @@ try {
     <?php endif; ?>
     </main>
 </div>
+<?php $profileUser = $client; require __DIR__ . '/../auth/profile-panel.php'; ?>
 </body>
 </html>

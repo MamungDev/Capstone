@@ -179,7 +179,7 @@ body.auth-open {
   margin:0 0 18px
 }
 
-#auth-description {
+#auth-description, #admin-description {
   font-size:16px;
   line-height:1.65;
   color:#65738d;

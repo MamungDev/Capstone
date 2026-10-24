@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__ . '/../auth/bootstrap.php';
 $artist = require_artist_auth();
+$artistPhotoUrl = !empty($artist['photo_mime']) ? 'profile-photo.php' : '';
 function artist_html(mixed $value): string {
     return htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 }
@@ -31,11 +32,37 @@ $brief = null;
 $rows = [];
 $error = '';
 $total = 0;
+$unlockError = '';
+header('Cache-Control: private, no-store');
 try {
+    require_once __DIR__ . '/../auth/brief-access.php';
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        require_csrf($_POST['csrf'] ?? null);
+        $code = is_string($_POST['access_code'] ?? null) ? strtolower(trim($_POST['access_code'])) : '';
+        $bucket = hash('sha256', 'brief-unlock:' . $artist['id']);
+        $now = time();
+        db()->prepare('INSERT INTO admin_login_limits (bucket, attempts, window_end) VALUES (?, 1, ?) ON DUPLICATE KEY UPDATE attempts = IF(window_end <= ?, 1, attempts + 1), window_end = IF(window_end <= ?, VALUES(window_end), window_end)')->execute([$bucket, $now + 900, $now, $now]);
+        $limit = db()->prepare('SELECT attempts FROM admin_login_limits WHERE bucket = ?');
+        $limit->execute([$bucket]);
+        if ((int) $limit->fetchColumn() > 10) {
+            http_response_code(429);
+            $unlockError = 'Too many attempts. Please try again in 15 minutes.';
+        } else {
+            $lookup = db()->prepare('SELECT brief_id FROM brief_access_codes WHERE access_code = ?');
+            $lookup->execute([preg_match('/^[a-f0-9]{32}$/D', $code) ? $code : '']);
+            $unlockedId = $lookup->fetchColumn();
+            if ($unlockedId) {
+                db()->prepare('INSERT INTO brief_artist_access (brief_id, artist_id) VALUES (?, ?) ON DUPLICATE KEY UPDATE artist_id = artist_id')->execute([$unlockedId, $artist['id']]);
+                header('Location: Artist%20UI.php?id=' . $unlockedId, true, 303);
+                exit;
+            }
+            $unlockError = 'That code is not valid. Ask your client to check their project code.';
+        }
+    }
     if ($detailRequested) {
         if (preg_match('/^[a-f0-9]{32}$/D', $id)) {
-            $query = db()->prepare('SELECT b.id, b.project_name, b.details_json, b.visual_mime, b.created_at, u.display_name AS client_name FROM client_briefs b JOIN users u ON u.id = b.client_id WHERE b.id = ?');
-            $query->execute([$id]);
+            $query = db()->prepare('SELECT b.id, b.project_name, b.details_json, b.visual_mime, b.created_at, u.display_name AS client_name FROM client_briefs b JOIN users u ON u.id = b.client_id JOIN brief_artist_access a ON a.brief_id = b.id WHERE b.id = ? AND a.artist_id = ?');
+            $query->execute([$id, $artist['id']]);
             $brief = $query->fetch() ?: null;
         }
         if (!$brief) {
@@ -45,9 +72,11 @@ try {
             $details = json_decode($brief['details_json'], true, 512, JSON_THROW_ON_ERROR);
         }
     } else {
-        $stats = db()->query('SELECT COUNT(*) AS total, COALESCE(SUM(visual_mime IS NOT NULL), 0) AS visual, COUNT(DISTINCT client_id) AS clients FROM client_briefs')->fetch();
-        $where = [];
-        $params = [];
+        $query = db()->prepare('SELECT COUNT(*) AS total, COALESCE(SUM(visual_mime IS NOT NULL), 0) AS visual, COUNT(DISTINCT client_id) AS clients FROM client_briefs b JOIN brief_artist_access a ON a.brief_id = b.id WHERE a.artist_id = ?');
+        $query->execute([$artist['id']]);
+        $stats = $query->fetch();
+        $where = ['EXISTS (SELECT 1 FROM brief_artist_access a WHERE a.brief_id = b.id AND a.artist_id = ?)'];
+        $params = [$artist['id']];
         if ($search !== '') {
             // Treat SQL wildcard characters as literal search text.
             $term = '%' . str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $search) . '%';
@@ -88,6 +117,9 @@ try {
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&amp;family=Manrope:wght@400;600;700;800&amp;family=Playfair+Display:ital,wght@0,600;0,700;1,600&amp;display=swap" rel="stylesheet">
     <link rel="stylesheet" href="artist.css?v=<?= filemtime(__DIR__ . '/artist.css') ?>">
+    <link rel="stylesheet" href="../assets/css/dropdowns.css?v=<?= filemtime(__DIR__ . '/../assets/css/dropdowns.css') ?>">
+    <script src="../assets/js/dropdowns.js?v=<?= filemtime(__DIR__ . '/../assets/js/dropdowns.js') ?>" defer></script>
+    <link rel="stylesheet" href="../assets/css/profile.css?v=<?= filemtime(__DIR__ . '/../assets/css/profile.css') ?>">
   </head>
   <body>
     <a class="skip-link" href="#artist-main">Skip to briefs</a>
@@ -97,12 +129,11 @@ try {
         <div class="nav">
           <a class="builder-home" href="../index.php">Home</a>
           <a class="inbox-nav" href="Artist%20UI.php" <?= !$detailRequested ? 'aria-current="page"' : '' ?>>Brief inbox</a>
-          <span class="artist-role">Artist account</span>
           <form method="post" action="../auth/logout.php">
             <input type="hidden" name="csrf" value="<?= htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8') ?>">
             <button class="plain" type="submit">Sign out</button>
           </form>
-          <div class="avatar" aria-label="Signed-in artist" title="<?= htmlspecialchars($artist['display_name'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?>"><?= htmlspecialchars(mb_strtoupper(mb_substr($artist['display_name'], 0, 1)), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?></div>
+          <button class="avatar" id="profile-trigger" type="button" aria-label="Open your profile" aria-haspopup="dialog" aria-controls="user-profile" title="View your profile"><?php if ($artistPhotoUrl): ?><img src="<?= artist_html($artistPhotoUrl) ?>" alt=""><?php else: ?><?= artist_html(mb_strtoupper(mb_substr($artist['display_name'], 0, 1))) ?><?php endif; ?></button>
         </div>
       </nav>
       <main class="artist-main" id="artist-main">
@@ -131,13 +162,24 @@ try {
         </aside></div>
       <?php else: ?>
         <header class="inbox-heading"><div><p class="eyebrow">Your creative studio</p><h1>Good work starts<br>with a <em>clear brief.</em></h1><p class="intro">A home for incoming ideas. Explore your clients' briefs and find the details that bring their vision to life.</p></div><div class="welcome-note"><span class="studio-star" aria-hidden="true">&#10023;</span><p>Welcome back,<br><strong><?= artist_html($artist['display_name']) ?>.</strong></p><span class="role-pill">Artist workspace</span></div></header>
+        <section class="card unlock-card" aria-labelledby="unlock-title">
+          <h2 id="unlock-title">Receive a private brief</h2>
+          <p class="muted">Enter the unique project code shared by your client to add their brief to your inbox.</p>
+          <form method="post" action="Artist%20UI.php" class="unlock-form">
+            <input type="hidden" name="csrf" value="<?= artist_html(csrf_token()) ?>">
+            <label for="project-code">Project code</label>
+            <input id="project-code" type="password" name="access_code" required maxlength="32" autocomplete="off" spellcheck="false" placeholder="Enter your client's code" aria-describedby="unlock-error">
+            <button class="button" type="submit">Unlock brief</button>
+          </form>
+          <p id="unlock-error" role="alert"><?= artist_html($unlockError) ?></p>
+        </section>
         <section class="stats" aria-label="Submission overview">
-          <div class="stat"><span>All briefs</span><strong><?= (int) $stats['total'] ?></strong><small>Ideas shared with the studio</small></div>
+          <div class="stat"><span>All briefs</span><strong><?= (int) $stats['total'] ?></strong><small>Projects unlocked by you</small></div>
           <div class="stat warm"><span>With visual references</span><strong><?= (int) $stats['visual'] ?></strong><small>Images and sketches to explore</small></div>
           <div class="stat mint"><span>Clients</span><strong><?= (int) $stats['clients'] ?></strong><small>People behind the ideas</small></div>
         </section>
         <section class="inbox" aria-labelledby="inbox-title">
-          <div class="inbox-title"><div><h2 id="inbox-title">The brief inbox</h2><p>Every new idea has a place here.</p></div><a class="small-button" href="<?= artist_html(inbox_url(['page' => $page])) ?>">&#8635; Refresh</a></div>
+          <div class="inbox-title"><div><h2 id="inbox-title">The brief inbox</h2><p>Projects unlocked with your clients' codes appear here.</p></div><a class="small-button" href="<?= artist_html(inbox_url(['page' => $page])) ?>">&#8635; Refresh</a></div>
           <form class="filters" method="get" action="Artist%20UI.php" role="search">
             <label class="search"><span class="sr-only">Search briefs by project, client, or idea</span><span aria-hidden="true">&#8981;</span><input type="search" name="q" maxlength="120" value="<?= artist_html($search) ?>" placeholder="Search projects, clients, or ideas"></label>
             <label class="select-filter">Type<select name="type"><option value="">All types</option><?php foreach ($types as $option): ?><option <?= $type === $option ? 'selected' : '' ?>><?= artist_html($option) ?></option><?php endforeach; ?></select></label>
@@ -147,7 +189,7 @@ try {
             <?php if ($search || $type || $withVisual || $sort !== 'newest'): ?><a class="clear-link" href="Artist%20UI.php">Clear filters</a><?php endif; ?>
           </form>
           <?php if (!$rows): ?>
-            <div class="empty-state"><span class="empty-symbol" aria-hidden="true">&#10023;</span><h2><?= $stats['total'] ? 'No matching briefs' : 'Room for the next big idea.' ?></h2><p><?= $stats['total'] ? 'Try a different search or clear the filters to explore every brief.' : 'When a client submits a brief, it will appear here. Select Refresh to check for new arrivals.' ?></p></div>
+            <div class="empty-state"><span class="empty-symbol" aria-hidden="true">&#10023;</span><h2><?= $stats['total'] ? 'No matching briefs' : 'Room for the next big idea.' ?></h2><p><?= $stats['total'] ? 'Try a different search or clear the filters to explore every brief.' : 'Enter the project code shared by your client above to receive your first private brief.' ?></p></div>
           <?php else: ?>
             <div class="table-wrap"><table><caption class="sr-only">Submitted client briefs</caption><thead><tr><th scope="col">Project</th><th scope="col">Client</th><th scope="col">Reference</th><th scope="col">Submitted</th><th scope="col"><span class="sr-only">Open brief</span></th></tr></thead><tbody>
             <?php foreach ($rows as $row): $rowDetails = json_decode($row['details_json'], true) ?: []; $link = inbox_url(['id' => $row['id']]); ?>
@@ -157,9 +199,11 @@ try {
             <nav class="pagination" aria-label="Brief pages"><span><?= ($page - 1) * 12 + 1 ?>&ndash;<?= min($page * 12, $total) ?> of <?= $total ?> briefs</span><div><?php if ($page > 1): ?><a class="small-button" href="<?= artist_html(inbox_url(['page' => $page - 1])) ?>">&larr; Previous</a><?php endif; ?><?php if ($page < $pages): ?><a class="small-button" href="<?= artist_html(inbox_url(['page' => $page + 1])) ?>">Next &rarr;</a><?php endif; ?></div></nav>
           <?php endif; ?>
         </section>
-        <p class="footnote">Submitted briefs are shared with the artist studio. Client drafts stay in their workspace.</p>
+        <p class="footnote">Only briefs you have unlocked appear here. Keep client project codes private.</p>
       <?php endif; ?>
       </main>
     </div>
+    <?php $profileUser = $artist; require __DIR__ . '/../auth/profile-panel.php'; ?>
+    <script src="../assets/js/profile.js?v=<?= filemtime(__DIR__ . '/../assets/js/profile.js') ?>" defer></script>
   </body>
 </html>

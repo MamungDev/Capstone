@@ -1,0 +1,28 @@
+/* Shared select controls for client, artist, and admin workspaces. */
+.site-select { position: relative; display: inline-block; min-width: 0; }
+.field .site-select { width: 100%; }
+.site-select select { display: none !important; }
+.site-select .site-select-trigger {
+  box-sizing: border-box; display: flex; align-items: center; justify-content: space-between;
+  gap: 18px; width: 100%; min-height: 46px; margin: 0; padding: 12px 14px;
+  border: 1px solid #cbd6e6; border-radius: 10px; background: #fff;
+  color: #1d2b4d; font: inherit; font-weight: 600; text-align: left; cursor: pointer;
+}
+.site-select-trigger::after { content: ''; width: 7px; height: 7px; flex-shrink: 0; border-right: 2px solid #6f809f; border-bottom: 2px solid #6f809f; transform: translateY(-2px) rotate(45deg); }
+.site-select-trigger[aria-expanded="true"]::after { transform: translateY(2px) rotate(225deg); }
+.site-select .site-select-trigger:hover { border-color: #8fa5d5; background: #fafbff; }
+.site-select .site-select-trigger:focus-visible, .site-select .site-select-trigger[aria-expanded="true"] { outline: none; border-color: #3158c9; box-shadow: 0 0 0 4px #e6edff; }
+.site-select .site-select-trigger:disabled { opacity: .55; cursor: not-allowed; }
+.select-filter .site-select-trigger { border: 0; min-height: 42px; padding: 10px 4px; font-size: 12px; }
+.site-select-menu {
+  position: fixed; z-index: 10000; box-sizing: border-box; margin: 0; padding: 6px;
+  overflow-y: auto; overscroll-behavior: contain; border: 1px solid #d7dfef;
+  border-radius: 12px; background: #fff; box-shadow: 0 12px 32px #1d2b4d24;
+  color: #1d2b4d; font: 13px/1.5 Manrope, Arial, sans-serif; text-align: left;
+}
+.site-select-menu[hidden] { display: none; }
+.site-select-option { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 12px; border-radius: 7px; cursor: pointer; }
+.site-select-option[aria-selected="true"] { color: #3158c9; background: #f0f3fc; font-weight: 700; }
+.site-select-option[aria-selected="true"]::after { content: '\2713'; font-weight: 800; }
+.site-select-option.is-active { background: #e6edff; color: #2448b2; }
+.site-select-option[aria-disabled="true"] { opacity: .45; cursor: not-allowed; }

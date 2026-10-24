@@ -7,8 +7,9 @@ if ($artist['role'] !== 'artist') json_response(['error' => 'Artist access requi
 $id = $_GET['id'] ?? '';
 if (!is_string($id) || !preg_match('/^[a-f0-9]{32}$/D', $id)) json_response(['error' => 'Reference not found.'], 404);
 try {
-    $query = db()->prepare('SELECT visual_mime, visual_data FROM client_briefs WHERE id = ?');
-    $query->execute([$id]);
+    require_once __DIR__ . '/../auth/brief-access.php';
+    $query = db()->prepare('SELECT visual_mime, visual_data FROM client_briefs b JOIN brief_artist_access a ON a.brief_id = b.id WHERE b.id = ? AND a.artist_id = ?');
+    $query->execute([$id, $artist['id']]);
     $row = $query->fetch();
     if (!$row || $row['visual_data'] === null) json_response(['error' => 'Reference not found.'], 404);
     $extensions = ['image/png' => 'png', 'image/jpeg' => 'jpg', 'image/webp' => 'webp', 'image/gif' => 'gif'];
