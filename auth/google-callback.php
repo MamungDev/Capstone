@@ -44,8 +44,13 @@ try {
     $certificates = google_json_request('https://www.googleapis.com/oauth2/v1/certs');
     $identity = verified_google_identity($token['id_token'], $config['google_client_id'], $pending['nonce'], $certificates);
     $stage = 'account sign-in';
+    ensure_onboarding_column();
     sign_in_user(google_account(db(), $identity, $role));
-    $destination = $role === 'artist' ? '../Artist/Artist%20UI.php' : '../Client/Client%20UI.php';
+    $user = current_user();
+    if (!$user) throw new RuntimeException('Google account session could not be loaded.');
+    $destination = !empty($user['onboarding_pending'])
+        ? 'complete-profile.php'
+        : ($role === 'artist' ? '../Artist/Artist%20UI.php' : '../Client/Client%20UI.php');
     header('Location: ' . $destination, true, 303);
     exit;
 } catch (DomainException $exception) {

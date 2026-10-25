@@ -18,6 +18,7 @@ let base;
 function fixture(sql) {
   execFileSync(php, ['-r', `
     $c = require 'auth/config.local.php';
+    if (!in_array($c['db_host'], ['127.0.0.1', 'localhost'], true)) throw new RuntimeException('Tests require local MySQL');
     $p = new PDO('mysql:host='.$c['db_host'].';port='.($c['db_port'] ?? 3306), $c['db_user'], $c['db_password'], [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
     $name = getenv('DB_NAME');
     if (!preg_match('/^mamungkun_admin_test_[a-f0-9]{16}$/D', $name)) throw new RuntimeException('Unsafe test database name');
@@ -27,7 +28,7 @@ function fixture(sql) {
 
 function session() {
   return { cookie: '', csrf: '', async request(route = 'Admin/index.php', data) {
-    const headers = this.cookie ? { Cookie: this.cookie } : {};
+    const headers = { Accept: 'application/json', ...(this.cookie ? { Cookie: this.cookie } : {}) };
     if (data) headers['Content-Type'] = 'application/x-www-form-urlencoded';
     const response = await fetch(base + route, { method: data ? 'POST' : 'GET', headers, body: data ? new URLSearchParams(data) : undefined, redirect: 'manual' });
     const cookie = response.headers.get('set-cookie');
@@ -74,12 +75,15 @@ async function startServer(password) {
     `);
     await startServer('');
     const disabled = session();
-    assert.match((await disabled.request('Admin/login.php')).text, /This deployment has no <code>ADMIN_PASSWORD<\/code>/);
+    const entry = await disabled.request('Admin/login.php');
+    assert.equal(entry.status, 303);
+    assert.equal(entry.headers.get('location'), '../index.php?auth=admin');
+    assert.match((await disabled.request('index.php?auth=admin')).text, /This deployment has no ADMIN_PASSWORD/);
     assert.equal((await disabled.request('Admin/login.php', { csrf: disabled.csrf, password: secret })).status, 403);
 
     await startServer('short-password');
     const short = session();
-    const shortPage = await short.request('Admin/login.php');
+    const shortPage = await short.request('index.php?auth=admin');
     assert.match(shortPage.text, /saved admin password is shorter than 16 characters/);
     assert.match(shortPage.text, /name="password"/);
     assert.equal((await short.request('Admin/login.php', { csrf: short.csrf, password: 'short-password' })).status, 403);
@@ -91,7 +95,7 @@ async function startServer(password) {
     assert.equal(redirect.status, 302);
     assert.equal(redirect.headers.get('location'), 'login.php');
     assert.doesNotMatch(redirect.text, /fixture1@example.invalid/);
-    await visitor.request('Admin/login.php');
+    await visitor.request('index.php?auth=admin');
     assert.equal((await visitor.request('Admin/index.php', { csrf: visitor.csrf, action: 'delete', user_id: 1, confirm_email: 'fixture1@example.invalid' })).status, 403);
     // A valid client login still must not grant admin access.
     const landing = await visitor.request('index.php');
@@ -101,12 +105,13 @@ async function startServer(password) {
     visitor.cookie = signin.headers.get('set-cookie').split(';')[0];
     assert.equal((await visitor.request()).status, 302, 'Client sign-in does not grant admin access');
 
-    await admin.request('Admin/login.php');
+    await admin.request('index.php?auth=admin');
     assert.equal((await admin.request('Admin/login.php', { csrf: 'wrong', password: secret })).status, 403);
     assert.equal((await admin.request('Admin/login.php', { csrf: admin.csrf, password: 'wrong' })).status, 403);
     const loggedIn = await admin.request('Admin/login.php', { csrf: admin.csrf, password: secret });
-    assert.equal(loggedIn.status, 303);
-    assert.equal(loggedIn.headers.get('location'), 'index.php');
+    assert.equal(loggedIn.status, 200);
+    assert.deepEqual(JSON.parse(loggedIn.text), { ok: true });
+
     assert.equal((await admin.request('Admin/login.php')).status, 303, 'Signed-in admins go straight to accounts');
     const list = await admin.request();
     assert.match(list.text, /22 matching account/);
@@ -135,16 +140,16 @@ async function startServer(password) {
     assert.equal((await admin.request()).status, 302);
     for (let attempt = 0; attempt < 10; attempt++) {
       const attacker = session();
-      await attacker.request('Admin/login.php');
+      await attacker.request('index.php?auth=admin');
       assert.equal((await attacker.request('Admin/login.php', { csrf: attacker.csrf, password: 'wrong' })).status, 403);
     }
     const locked = session();
-    await locked.request('Admin/login.php');
+    await locked.request('index.php?auth=admin');
     assert.equal((await locked.request('Admin/login.php', { csrf: locked.csrf, password: secret })).status, 429);
     const rotated = randomBytes(24).toString('hex');
     await startServer(rotated);
-    await admin.request('Admin/login.php');
-    assert.equal((await admin.request('Admin/login.php', { csrf: admin.csrf, password: rotated })).status, 303);
+    await admin.request('index.php?auth=admin');
+    assert.equal((await admin.request('Admin/login.php', { csrf: admin.csrf, password: rotated })).status, 200);
     await startServer(secret);
     assert.equal((await admin.request()).status, 302, 'Password rotation revokes admin session');
     console.log('PASS: disabled/unauthorized access, CSRF, login/logout, search/filter/pagination, escaping, confirmed deletion, client access revocation, shared rate limit, and password rotation.');

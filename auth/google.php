@@ -45,7 +45,7 @@ function google_account(PDO $pdo, array $identity, string $role): int
     if ($name === '') $name = explode('@', $email)[0];
     $name = mb_substr($name, 0, 100);
     $returning = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) !== 'mysql';
-    $insert = $pdo->prepare('INSERT INTO users (role, email, display_name, google_sub) VALUES (?, ?, ?, ?)' . ($returning ? ' RETURNING id' : ''));
+    $insert = $pdo->prepare('INSERT INTO users (role, email, display_name, google_sub, onboarding_pending) VALUES (?, ?, ?, ?, TRUE)' . ($returning ? ' RETURNING id' : ''));
     try {
         $insert->execute([$role, $email, $name, $identity['sub']]);
         return (int) ($returning ? $insert->fetchColumn() : $pdo->lastInsertId());

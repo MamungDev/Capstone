@@ -1,0 +1,24 @@
+* { box-sizing:border-box; }
+body { display:grid; place-items:center; min-height:100dvh; margin:0; padding:24px; background:#f7f8fc; color:#1d2b4d; font-family:'Manrope',Arial,sans-serif; }
+.profile-card { width:min(100%,480px); padding:40px 36px 32px; border:1px solid #e1e6f0; border-radius:24px; background:#fff; box-shadow:0 24px 70px #14213e1f; }
+.brand-mark { display:grid; place-items:center; width:52px; height:52px; margin:0 auto 24px; border-radius:15px; background:#1d2b4d; color:#ffd166; font-size:32px; transform:rotate(-6deg); }
+.eyebrow { margin:0 0 14px; color:#8b503e; font:12px 'DM Mono',monospace; letter-spacing:.1em; text-align:center; }
+h1 { margin:0 0 12px; font:600 34px/1.15 'Playfair Display',Georgia,serif; letter-spacing:-1px; text-align:center; }
+.intro { margin:0 0 30px; color:#65738d; font-size:15px; line-height:1.6; text-align:center; }
+label { display:block; margin:19px 0 8px; color:#52637f; font-size:12px; font-weight:700; }
+label span { font-weight:400; }
+input,textarea { width:100%; padding:12px 14px; border:1px solid #d5deeb; border-radius:9px; background:#fbfcff; color:#1d2b4d; font:14px 'Manrope',Arial,sans-serif; }
+input { min-height:46px; }
+textarea { min-height:92px; resize:vertical; }
+input:focus-visible,textarea:focus-visible,button:focus-visible { outline:2px solid #3158c9; outline-offset:2px; }
+.field-help { margin:7px 0 0; color:#71809c; font-size:11px; }
+.account-summary { display:flex; flex-wrap:wrap; justify-content:space-between; gap:6px 12px; margin:24px 0; padding:13px 0; border-top:1px solid #e3e8f1; border-bottom:1px solid #e3e8f1; color:#65738d; font-size:12px; }
+.account-summary span:last-child { overflow-wrap:anywhere; }
+button { width:100%; min-height:48px; padding:12px 16px; border:0; border-radius:9px; background:#1d2b4d; color:#fff; cursor:pointer; font:700 14px 'Manrope',Arial,sans-serif; }
+button:hover { background:#3158c9; }
+.footer-note { margin:20px 0 0; color:#71809c; font-size:12px; line-height:1.6; text-align:center; }
+.sign-out { margin-top:12px; }
+.sign-out button { min-height:38px; background:transparent; color:#52637f; font-size:12px; font-weight:600; }
+.sign-out button:hover { background:#f0f4ff; }
+.error { margin:0 0 18px; padding:12px; border-radius:8px; background:#fff3dd; color:#674915; font-size:13px; line-height:1.5; }
+@media(max-width:480px) { .profile-card { padding:36px 22px 28px; } h1 { font-size:31px; } }

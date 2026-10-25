@@ -1,0 +1,9 @@
+.project-progress { margin: 20px 0; padding: 24px; }
+.project-progress h2 { margin-top: 0; }
+.project-progress form { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 16px; }
+.project-progress label, .project-progress form p { flex-basis: 100%; }
+.project-progress select { width: min(100%, 440px); min-width: 0; padding: 12px; border: 1px solid #b7bdc8; border-radius: 8px; background: #fff; color: #202332; font: inherit; }
+.project-progress button { padding: 12px 18px; border: 1px solid #202332; border-radius: 8px; background: #202332; color: #fff; font: inherit; cursor: pointer; }
+.project-progress button:focus-visible, .project-progress select:focus-visible { outline: 3px solid #8b70ff; outline-offset: 3px; }
+.project-progress p { overflow-wrap: anywhere; }
+@media (max-width: 600px) { .project-progress { padding: 18px; } .project-progress button { width: 100%; } }

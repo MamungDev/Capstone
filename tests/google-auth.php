@@ -56,9 +56,13 @@ check(!google_configured(array_replace($config, ['google_redirect_uri' => 'http:
 
 // Isolated database exercises identity and role handling without touching user records.
 $pdo = new PDO('sqlite::memory:', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
-$pdo->exec('CREATE TABLE users (id INTEGER PRIMARY KEY, role TEXT NOT NULL, email TEXT NOT NULL UNIQUE, display_name TEXT NOT NULL, google_sub TEXT UNIQUE, password_hash TEXT)');
+$pdo->exec('CREATE TABLE users (id INTEGER PRIMARY KEY, role TEXT NOT NULL, email TEXT NOT NULL UNIQUE, display_name TEXT NOT NULL, google_sub TEXT UNIQUE, password_hash TEXT, onboarding_pending INTEGER NOT NULL DEFAULT 0)');
 $clientId = google_account($pdo, $claims, 'client');
 check($clientId > 0 && google_account($pdo, $claims, 'client') === $clientId, 'Repeat login duplicated account.');
+check((int) $pdo->query('SELECT onboarding_pending FROM users WHERE id = ' . $clientId)->fetchColumn() === 1, 'New Google account must complete onboarding.');
+$pdo->exec('UPDATE users SET onboarding_pending = 0 WHERE id = ' . $clientId);
+check(google_account($pdo, $claims, 'client') === $clientId, 'Returning account changed.');
+check((int) $pdo->query('SELECT onboarding_pending FROM users WHERE id = ' . $clientId)->fetchColumn() === 0, 'Returning account was forced to repeat onboarding.');
 rejects(static fn () => google_account($pdo, $claims, 'artist'), 'role-mismatch');
 rejects(static fn () => google_account($pdo, $claims, 'admin'), 'role-mismatch');
 $artist = array_replace($claims, ['sub' => 'artist-sub', 'email' => 'artist@gmail.com']);

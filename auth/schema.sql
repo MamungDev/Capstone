@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS users (
   photo_data MEDIUMBLOB NULL,
   password_hash VARCHAR(255) NULL,
   google_sub VARCHAR(255) NULL,
+  onboarding_pending TINYINT(1) NOT NULL DEFAULT 0,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
@@ -80,4 +81,15 @@ CREATE TABLE IF NOT EXISTS brief_artist_access (
   KEY artist_briefs (artist_id),
   FOREIGN KEY (brief_id) REFERENCES client_briefs (id) ON DELETE CASCADE,
   FOREIGN KEY (artist_id) REFERENCES users (id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS brief_workflow (
+  brief_id CHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL PRIMARY KEY,
+  artist_id BIGINT UNSIGNED NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'submitted',
+  version INT NOT NULL DEFAULT 0,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (brief_id) REFERENCES client_briefs(id) ON DELETE CASCADE,
+  FOREIGN KEY (artist_id) REFERENCES users(id) ON DELETE SET NULL,
+  CHECK (status IN ('submitted', 'accepted', 'in_progress', 'review', 'completed'))
 ) ENGINE=InnoDB;

@@ -38,6 +38,13 @@ module.exports = async function checkArtistWorkspace({ owner, other, artist, ano
   const signedIn = await login.json();
   artist.csrf = signedIn.csrf;
   assert.equal(signedIn.redirect, route);
+  // A signed-in artist must unlock the owner's private brief first.
+  assert.equal((await artist.request(route + '?id=' + submissionId)).status, 404);
+  const ownerPage = await (await owner.request('Client/submitted.php?id=' + submissionId)).text();
+  const accessCode = ownerPage.match(/aria-label="Private project code" readonly value="([a-f0-9]+)"/)[1];
+  const unlocked = await fetch(base + route, { method: 'POST', redirect: 'manual',
+    headers: { Cookie: artist.cookie }, body: new URLSearchParams({ csrf: artist.csrf, access_code: accessCode }) });
+  assert.equal(unlocked.status, 303);
   const inboxBefore = await getPage();
   assert.match(inboxBefore, /The brief inbox/);
   const baseline = stats(inboxBefore);
@@ -75,13 +82,17 @@ module.exports = async function checkArtistWorkspace({ owner, other, artist, ano
   for (let index = 0; index < 13; index++) {
     const submission = id();
     const response = await other.request('Client/submit-brief.php', { csrf: other.csrf, submissionId: submission, brief: {
-      ...brief, projectName: `${marker} ${index === 0 ? '%_!' : index}`, projectType: index % 2 ? 'Social post' : 'Poster',
+      ...brief, accessCode: id(), projectName: `${marker} ${index === 0 ? '%_!' : index}`, projectType: index % 2 ? 'Social post' : 'Poster',
       idea: `A second client's idea ${marker}-idea-${index}.`,
       reference: index === 0 ? brief.reference : null, sketch: index === 1 ? brief.reference : null, referenceName: index === 0 ? 'reference.png' : '',
     }});
     assert.equal(response.status, 201);
     added.push(submission);
   }
+  // Seed permissions for pagination fixtures; code validation/rate limits have dedicated privacy tests.
+  require('node:child_process').execFileSync(process.env.PHP_BINARY || 'C:/xampp/php/php.exe', ['-r',
+    'require "auth/bootstrap.php"; $q=db()->prepare("INSERT INTO brief_artist_access (brief_id, artist_id) SELECT ?, id FROM users WHERE email=?"); foreach(array_slice($argv,2) as $id) $q->execute([$id,$argv[1]]);',
+    emails[2], ...added], { cwd: require('node:path').resolve(__dirname, '..'), stdio: 'inherit' });
   const inboxAfter = await getPage();
   assert.deepEqual(stats(inboxAfter), [baseline[0] + 13, baseline[1] + 2, baseline[2] + 1]);
   const query = '?q=' + marker;
@@ -102,9 +113,9 @@ module.exports = async function checkArtistWorkspace({ owner, other, artist, ano
   assert.equal(projectIds(await getPage('?q=' + encodeURIComponent(`Temporary other ${suffix}`))).length, 12);
   assert.match(await getPage('?q=' + marker + '-no-match'), /No matching briefs/);
   const sketchPage = await getPage('?id=' + added[1]);
-  assert.match(sketchPage, /Client sketch/);
+  assert.match(sketchPage, /<strong>Sketch<\/strong>/);
   const noImage = await getPage('?id=' + added[2]);
-  assert.match(noImage, /No visual reference was attached/);
+  assert.match(noImage, /No visual references were attached/);
   assert.equal((await artist.request(imageRoute + added[2])).status, 404);
   assert.deepEqual(Buffer.from(await (await artist.request(imageRoute + added[1])).arrayBuffer()), png);
   // Following a brief and returning must preserve the list position and filters.

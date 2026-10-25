@@ -184,6 +184,7 @@ function ensure_database_schema(): void
         db()->query('SELECT 1 FROM client_brief_references LIMIT 0');
         db()->query('SELECT 1 FROM brief_access_codes LIMIT 0');
         db()->query('SELECT 1 FROM brief_artist_access LIMIT 0');
+        db()->query('SELECT 1 FROM brief_workflow LIMIT 0');
         db()->query('SELECT 1 FROM admin_login_limits LIMIT 0');
         return;
     } catch (PDOException $error) {
@@ -249,14 +250,42 @@ function require_csrf(mixed $token): void
     }
 }
 
+function ensure_onboarding_column(): void
+{
+    static $checked = false;
+    if ($checked) return;
+    try {
+        db()->query('SELECT onboarding_pending FROM users LIMIT 0');
+    } catch (PDOException $exception) {
+        $missingColumn = db_driver() === 'pgsql'
+            ? $exception->getCode() === '42703'
+            : (($exception->errorInfo[1] ?? null) === 1054);
+        if (!$missingColumn) throw $exception;
+        $column = db_driver() === 'pgsql'
+            ? 'onboarding_pending BOOLEAN NOT NULL DEFAULT FALSE'
+            : 'onboarding_pending TINYINT(1) NOT NULL DEFAULT 0';
+        try {
+            db()->exec('ALTER TABLE users ADD COLUMN ' . $column);
+        } catch (PDOException $migrationError) {
+            $duplicateColumn = db_driver() === 'pgsql'
+                ? $migrationError->getCode() === '42701'
+                : (($migrationError->errorInfo[1] ?? null) === 1060);
+            if (!$duplicateColumn) throw $migrationError;
+        }
+    }
+    $checked = true;
+}
+
 function current_user(): ?array
 {
     $id = $_SESSION['user_id'] ?? null;
     if (!is_int($id) || $id < 1) return null;
     try {
-        $sql = 'SELECT id, role, email, display_name, bio, photo_mime, (photo_data IS NOT NULL) AS has_profile_photo FROM users WHERE id = ? LIMIT 1';
+        ensure_onboarding_column();
+        $sql = 'SELECT id, role, email, display_name, bio, photo_mime, onboarding_pending, (photo_data IS NOT NULL) AS has_profile_photo FROM users WHERE id = ? LIMIT 1';
         try {
             $statement = db()->prepare($sql);
+            $statement->execute([$id]);
         } catch (PDOException $exception) {
             $unknownColumn = db_driver() === 'pgsql'
                 ? $exception->getCode() === '42703'
@@ -277,8 +306,8 @@ function current_user(): ?array
                 }
             }
             $statement = db()->prepare($sql);
+            $statement->execute([$id]);
         }
-        $statement->execute([$id]);
         $user = $statement->fetch();
         return $user ?: null;
     } catch (PDOException $exception) {
@@ -310,6 +339,10 @@ function require_role_auth(string $role): array
     $user = current_user();
     if (!$user || $user['role'] !== $role) {
         header('Location: ../index.php?auth=' . $role, true, 302);
+        exit;
+    }
+    if (!empty($user['onboarding_pending'])) {
+        header('Location: ../auth/complete-profile.php', true, 302);
         exit;
     }
     header('Cache-Control: private, no-store');

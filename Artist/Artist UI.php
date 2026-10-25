@@ -36,6 +36,7 @@ $unlockError = '';
 header('Cache-Control: private, no-store');
 try {
     require_once __DIR__ . '/../auth/brief-references.php';
+    require_once __DIR__ . '/../auth/workflow.php';
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_csrf($_POST['csrf'] ?? null);
         $code = is_string($_POST['access_code'] ?? null) ? strtolower(trim($_POST['access_code'])) : '';
@@ -106,7 +107,7 @@ try {
         $pages = max(1, (int) ceil($total / 12));
         $page = min($page, $pages);
         $order = $sort === 'oldest' ? 'ASC' : 'DESC';
-        $query = db()->prepare('SELECT b.id, b.project_name, b.details_json, b.visual_mime, b.created_at, u.display_name AS client_name' . $from . " ORDER BY b.created_at $order, b.id $order LIMIT 12 OFFSET " . (($page - 1) * 12));
+        $query = db()->prepare('SELECT b.id, b.project_name, b.details_json, b.visual_mime, b.created_at, COALESCE((SELECT status FROM brief_workflow WHERE brief_id = b.id), \'submitted\') AS project_status, u.display_name AS client_name' . $from . " ORDER BY b.created_at $order, b.id $order LIMIT 12 OFFSET " . (($page - 1) * 12));
         $query->execute($params);
         $rows = $query->fetchAll();
     }
@@ -131,6 +132,7 @@ try {
     <link rel="stylesheet" href="../assets/css/dropdowns.css?v=<?= filemtime(__DIR__ . '/../assets/css/dropdowns.css') ?>">
     <script src="../assets/js/dropdowns.js?v=<?= filemtime(__DIR__ . '/../assets/js/dropdowns.js') ?>" defer></script>
     <link rel="stylesheet" href="../assets/css/profile.css?v=<?= filemtime(__DIR__ . '/../assets/css/profile.css') ?>">
+  <link rel="stylesheet" href="../assets/css/workflow.css">
   </head>
   <body>
     <a class="skip-link" href="#artist-main">Skip to briefs</a>
@@ -152,7 +154,8 @@ try {
         <section class="empty-state card" role="alert"><span class="empty-symbol" aria-hidden="true">&#10023;</span><h1>Let's try again.</h1><p><?= artist_html($error) ?></p><a class="button" href="Artist%20UI.php">Return to inbox</a></section>
       <?php elseif ($brief): ?>
         <a class="back-link" href="<?= artist_html(inbox_url()) ?>">&larr; Back to the inbox</a>
-        <header class="detail-heading"><div><p class="eyebrow"><?= artist_html($details['projectType'] ?: 'Creative brief') ?></p><h1><?= artist_html($brief['project_name']) ?></h1><p class="muted">Submitted <?= artist_html(submitted_date($brief['created_at'])) ?> &middot; <?= artist_html($brief['client_name']) ?></p></div><span class="status">Submitted</span></header>
+        <header class="detail-heading"><div><p class="eyebrow"><?= artist_html($details['projectType'] ?: 'Creative brief') ?></p><h1><?= artist_html($brief['project_name']) ?></h1><p class="muted">Submitted <?= artist_html(submitted_date($brief['created_at'])) ?> &middot; <?= artist_html($brief['client_name']) ?></p></div><span class="status"><?= artist_html(workflow_labels()[workflow_read($brief['id'])['status']]) ?></span></header>
+        <?php require __DIR__ . '/../auth/workflow-panel.php'; ?>
         <div class="detail-grid"><div>
           <section class="card"><p class="section-label">01 / The idea</p><h2>The starting point</h2><p class="description"><?= artist_html($details['idea']) ?></p>
             <dl class="detail-fields">
@@ -208,7 +211,7 @@ try {
           <?php else: ?>
             <div class="table-wrap"><table><caption class="sr-only">Submitted client briefs</caption><thead><tr><th scope="col">Project</th><th scope="col">Client</th><th scope="col">Reference</th><th scope="col">Submitted</th><th scope="col"><span class="sr-only">Open brief</span></th></tr></thead><tbody>
             <?php foreach ($rows as $row): $rowDetails = json_decode($row['details_json'], true) ?: []; $link = inbox_url(['id' => $row['id']]); ?>
-              <tr><td><a class="project-link" href="<?= artist_html($link) ?>"><span class="file-icon" aria-hidden="true"><?= $row['visual_mime'] ? '&#9639;' : '&#8801;' ?></span><span><strong><?= artist_html($row['project_name']) ?></strong><small><?= artist_html($rowDetails['projectType'] ?? 'Creative brief') ?></small></span></a></td><td><span class="client-name"><?= artist_html($row['client_name']) ?></span></td><td><span class="reference-badge <?= $row['visual_mime'] ? 'attached' : '' ?>"><?= $row['visual_mime'] ? (($rowDetails['referenceCount'] ?? 1) > 1 ? (int) $rowDetails['referenceCount'] . ' references' : (($rowDetails['visualKind'] ?? '') === 'sketch' ? 'Sketch' : 'Image')) : 'Written brief' ?></span></td><td class="date"><time datetime="<?= artist_html(substr($row['created_at'], 0, 10)) ?>"><?= artist_html(submitted_date($row['created_at'])) ?></time></td><td><a class="open-link" href="<?= artist_html($link) ?>" aria-label="Open <?= artist_html($row['project_name']) ?>">View &nearr;</a></td></tr>
+              <tr><td><a class="project-link" href="<?= artist_html($link) ?>"><span class="file-icon" aria-hidden="true"><?= $row['visual_mime'] ? '&#9639;' : '&#8801;' ?></span><span><strong><?= artist_html($row['project_name']) ?></strong><span class="status"><?= artist_html(workflow_labels()[$row['project_status']]) ?></span><small><?= artist_html($rowDetails['projectType'] ?? 'Creative brief') ?></small></span></a></td><td><span class="client-name"><?= artist_html($row['client_name']) ?></span></td><td><span class="reference-badge <?= $row['visual_mime'] ? 'attached' : '' ?>"><?= $row['visual_mime'] ? (($rowDetails['referenceCount'] ?? 1) > 1 ? (int) $rowDetails['referenceCount'] . ' references' : (($rowDetails['visualKind'] ?? '') === 'sketch' ? 'Sketch' : 'Image')) : 'Written brief' ?></span></td><td class="date"><time datetime="<?= artist_html(substr($row['created_at'], 0, 10)) ?>"><?= artist_html(submitted_date($row['created_at'])) ?></time></td><td><a class="open-link" href="<?= artist_html($link) ?>" aria-label="Open <?= artist_html($row['project_name']) ?>">View &nearr;</a></td></tr>
             <?php endforeach; ?>
             </tbody></table></div>
             <nav class="pagination" aria-label="Brief pages"><span><?= ($page - 1) * 12 + 1 ?>&ndash;<?= min($page * 12, $total) ?> of <?= $total ?> briefs</span><div><?php if ($page > 1): ?><a class="small-button" href="<?= artist_html(inbox_url(['page' => $page - 1])) ?>">&larr; Previous</a><?php endif; ?><?php if ($page < $pages): ?><a class="small-button" href="<?= artist_html(inbox_url(['page' => $page + 1])) ?>">Next &rarr;</a><?php endif; ?></div></nav>

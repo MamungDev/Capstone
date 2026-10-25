@@ -12,6 +12,7 @@ $error = '';
 $page = max(1, min(100000, (int) ($_GET['page'] ?? 1)));
 try {
     require_once __DIR__ . '/../auth/brief-references.php';
+    require_once __DIR__ . '/../auth/workflow.php';
     if ($id !== null) {
         if (is_string($id) && preg_match('/^[a-f0-9]{32}$/D', $id)) {
             $query = db()->prepare('SELECT id, details_json, created_at, visual_mime FROM client_briefs WHERE id = ? AND client_id = ?');
@@ -27,7 +28,7 @@ try {
             $references = brief_reference_list($brief, $details);
         }
     } else {
-        $query = db()->prepare('SELECT id, project_name, created_at FROM client_briefs WHERE client_id = ? ORDER BY created_at DESC, id DESC LIMIT 21 OFFSET ' . (($page - 1) * 20));
+        $query = db()->prepare('SELECT id, project_name, created_at, COALESCE((SELECT status FROM brief_workflow WHERE brief_id = client_briefs.id), \'submitted\') AS project_status FROM client_briefs WHERE client_id = ? ORDER BY created_at DESC, id DESC LIMIT 21 OFFSET ' . (($page - 1) * 20));
         $query->execute([$client['id']]);
         $rows = $query->fetchAll();
     }
@@ -48,6 +49,7 @@ try {
     <link rel="stylesheet" href="client.css?v=<?= filemtime(__DIR__ . '/client.css') ?>">
   <link rel="stylesheet" href="../assets/css/profile.css?v=<?= filemtime(__DIR__ . '/../assets/css/profile.css') ?>">
   <script src="../assets/js/profile.js?v=<?= filemtime(__DIR__ . '/../assets/js/profile.js') ?>" defer></script>
+<link rel="stylesheet" href="../assets/css/workflow.css">
 </head>
 <body>
 <div class="shell">
@@ -72,6 +74,7 @@ try {
         <div class="eyebrow">Brief submitted</div>
         <h1 class="brief-title"><?= html($details['projectName']) ?></h1>
         <p class="intro">Your saved creative brief. Submitted <?= html($brief['created_at']) ?> (database time).</p>
+        <?php require __DIR__ . '/../auth/workflow-panel.php'; ?>
         <section class="review">
             <div class="card">
                 <div class="summary"><strong>Private project code</strong><input aria-label="Private project code" readonly value="<?= html($accessCode) ?>" onclick="this.select()"><p class="subtle">Share this code only with your chosen artist. They must enter it in their inbox to receive this brief and its references.</p></div>
@@ -109,7 +112,7 @@ try {
             <?php foreach (array_slice($rows, 0, 20) as $row): ?>
                 <a class="card brief-list-item" href="submitted.php?id=<?= html($row['id']) ?>">
                     <div><h2><?= html($row['project_name']) ?></h2><span class="subtle">Submitted <?= html($row['created_at']) ?> (database time)</span></div>
-                    <span aria-hidden="true">&rarr;</span>
+                    <span><?= html(workflow_labels()[$row['project_status']]) ?> &rarr;</span>
                 </a>
             <?php endforeach; ?>
         </section>

@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS users (
   photo_data BYTEA,
   password_hash VARCHAR(255),
   google_sub VARCHAR(255) UNIQUE,
+  onboarding_pending BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -64,3 +65,11 @@ CREATE TABLE IF NOT EXISTS brief_artist_access (
   PRIMARY KEY (brief_id, artist_id)
 );
 CREATE INDEX IF NOT EXISTS artist_briefs ON brief_artist_access (artist_id);
+
+CREATE TABLE IF NOT EXISTS brief_workflow (
+  brief_id CHAR(32) PRIMARY KEY REFERENCES client_briefs(id) ON DELETE CASCADE,
+  artist_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'submitted' CHECK (status IN ('submitted', 'accepted', 'in_progress', 'review', 'completed')),
+  version INTEGER NOT NULL DEFAULT 0,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

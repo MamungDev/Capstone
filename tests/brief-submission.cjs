@@ -4,9 +4,9 @@ const assert = require('node:assert/strict');
 const { randomBytes } = require('node:crypto');
 const { execFileSync } = require('node:child_process');
 const path = require('node:path');
-const base = 'http://localhost/Capstone/';
+const base = process.env.TEST_BASE_URL || 'http://localhost/Capstone/';
 const bootstrap = path.resolve(__dirname, '../auth/bootstrap.php');
-const php = 'C:/xampp/php/php.exe';
+const php = process.env.PHP_BINARY || 'C:/xampp/php/php.exe';
 const suffix = randomBytes(8).toString('hex');
 const emails = ['owner', 'other', 'artist'].map(name => `brief-test-${name}-${suffix}@example.invalid`);
 const password = randomBytes(18).toString('hex');
@@ -42,7 +42,7 @@ async function signup(index, role) {
     const artist = await signup(2, 'artist');
     const anonymous = session();
     const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jA3sAAAAASUVORK5CYII=', 'base64');
-    const brief = { projectName: '<script>alert(1)</script> Midnight', projectType: 'Poster',
+    const brief = { accessCode: id(), projectName: '<script>alert(1)</script> Midnight', projectType: 'Poster',
       idea: 'A warm jazz poster.\nA second line.', audience: 'Music fans', goal: 'Sell tickets',
       format: 'Poster \u00b7 4:5', style: 'Hand-crafted', energy: 'Warm & rich', tags: ['Warm', 'Editorial'],
       referenceName: '<img src=x onerror=alert(1)>.png', reference: 'data:image/png;base64,' + png.toString('base64'), sketch: null };
@@ -86,7 +86,7 @@ async function signup(index, role) {
     assert.ok(otherList.includes('No submitted briefs here yet'));
     for (const sketch of [null, brief.reference]) {
       const anotherId = id();
-      assert.equal((await submit({ ...payload, submissionId: anotherId, brief: { ...brief, reference: null, referenceName: '', sketch } })).status, 201);
+      assert.equal((await submit({ ...payload, submissionId: anotherId, brief: { ...brief, accessCode: id(), reference: null, referenceName: '', sketch } })).status, 201);
       const visual = await owner.request('Client/brief-image.php?id=' + anotherId);
       assert.equal(visual.status, sketch ? 200 : 404);
     }
@@ -96,6 +96,7 @@ async function signup(index, role) {
     assert.equal((await owner.request('Client/brief-image.php?id=' + submissionId)).status, 401);
     const login = await owner.request('auth/account.php', { csrf: owner.csrf, action: 'signin', role: 'client', email: emails[0], password });
     assert.equal(login.status, 200);
+    owner.csrf = (await login.json()).csrf;
     assert.equal((await owner.request('Client/submitted.php?id=' + submissionId)).status, 200);
     const list = await (await owner.request('Client/submitted.php')).text();
     assert.equal((list.match(/class="card brief-list-item"/g) || []).length, 3);

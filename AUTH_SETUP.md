@@ -10,18 +10,18 @@ Clients can complete **Describe → Set direction → Add references → Review*
 
 The `client_briefs` table has already been created in the local `mamungkun_capstone` database. No manual phpMyAdmin setup is needed on this computer. On another installation, select the target database and import `auth/schema.sql`; it creates missing tables without deleting existing accounts. The `client_id` column links each brief to its owner, `details_json` contains the written brief, and `visual_data` stores image bytes. View images through **My briefs**, rather than the raw BLOB in phpMyAdmin. Uploads in the browser are limited to 2 MB to leave room for local draft storage; the server also validates image type, size, and dimensions.
 
-Submitted briefs are viewable by their client and by signed-in artists. For this local team demo, every artist account can browse all submitted briefs. The artist inbox shows totals for briefs, visual references, and submitting clients. Artists can search project names, client names, or idea descriptions; filter by project type or attached reference; sort by submission date; and page through results. Select **View** to read the full brief and view or download its image or sketch. **Back to the inbox** preserves filters, sorting, and the current page. **Refresh** checks for new submissions.
+Submitted briefs are private to their client until an artist enters the project code shared by that client. Each artist sees only briefs they have unlocked. The artist inbox shows totals for briefs, visual references, and submitting clients. Artists can search project names, client names, or idea descriptions; filter by project type or attached reference; sort by submission date; and page through results. Select **View** to read the full brief and view or download its image or sketch. **Back to the inbox** preserves filters, sorting, and the current page. **Refresh** checks for new submissions.
 
 To demonstrate the complete flow:
 
 1. Sign in as a client, finish the four steps, and submit a brief with an optional reference or sketch.
 2. Sign out, then sign in with a separate artist account through the auth modal.
-3. Open the brief from the artist inbox and review the client's answers and reference. Use **Download reference** to save the attachment.
+3. Enter the project code shared from the client?s submitted brief, then open the brief from the artist inbox and review the client's answers and reference. Use **Download reference** to save the attachment.
 4. Sign back in as the client and open **My briefs** to view the same submission.
 
-Client accounts cannot open the artist inbox or its reference endpoints. Clients can only view their own submissions through **My briefs**. Artist assignment, messaging, editable studio notes, and status tracking are not implemented yet. Google sign-in is available after the setup below.
+Client accounts cannot open the artist inbox or its reference endpoints. Clients can only view their own submissions through **My briefs**. Clients can assign an artist and track project progress. Messaging and editable studio notes are not implemented yet. Google sign-in is available after the setup below.
 
-To run the client and artist regression checks with Apache and MySQL running, use `node tests/brief-submission.cjs` from the project folder. It creates temporary accounts and briefs, checks persistence, access isolation, validation, images, sketches, retry handling, artist sign-in/sign-out, inbox search/filter/sort/pagination, and reference downloads, then deletes its test records. Existing accounts and briefs are preserved. The artist checks are in `tests/artist-workspace.cjs` and run as part of this command. These are HTTP/database checks; visual layout should also be reviewed in a browser at desktop and mobile widths.
+For all checks using temporary databases and a dedicated PHP server, run `node tests/run.cjs` (see README.md). To run only the legacy client and artist checks against local Apache with MySQL running, use `node tests/brief-submission.cjs` from the project folder. It creates temporary accounts and briefs, checks persistence, access isolation, validation, images, sketches, retry handling, artist sign-in/sign-out, inbox search/filter/sort/pagination, and reference downloads, then deletes its test records. Existing accounts and briefs are preserved. The artist checks are in `tests/artist-workspace.cjs` and run as part of this command. These are HTTP/database checks; visual layout should also be reviewed in a browser at desktop and mobile widths.
 
 The local database connection is configured in `auth/config.local.php`. That file is ignored by Git and denied direct HTTP access. If your XAMPP MySQL root password changes, update `db_password` there. Do not put the database credentials in `index.php` or JavaScript.
 
@@ -52,6 +52,10 @@ Google verifies identity through the PHP OAuth callback. Application accounts re
 
 Accounts already registered with a password must continue using their password. Matching emails are never automatically linked; linking an existing password account would require a separate authenticated flow. For the first Google login, use a Google account that has not already been registered with a password in this app.
 
+New Google accounts complete a profile before entering their client or artist workspace. The page prefills their Google display name and accepts an optional bio. Successful submission saves the profile and completes onboarding; returning users who have completed this step go straight to their workspace. Existing accounts are not forced through onboarding when the database is upgraded.
+
+Run `node tests/onboarding.cjs` with local XAMPP MySQL running to verify profile validation, CSRF protection, client/artist workspace redirects, role isolation, profile persistence, sign-out, and upgrades from older profile schemas. It uses a separate temporary database and removes it afterwards. Together with `php tests/google-auth.php` and `node tests/google-flow.cjs`, this checks onboarding without contacting Google. A real Google login on the deployed site still requires a manual check with configured OAuth credentials.
+
 The callback uses one-time session state, a nonce, PKCE, and signed Google ID token verification. Preview URLs redirect to the configured callback hostname before starting Google login so the callback receives the correct session cookie. Configure a separate Google client and callback for a separate testing deployment rather than mixing production and testing accounts.
 
 For local development, use a separate Google web client with `http://localhost/Capstone/auth/google-callback.php` and set `google_client_id`, `google_client_secret`, and `google_redirect_uri` in the ignored `auth/config.local.php`. Keep credentials out of Git and chat.
@@ -64,7 +68,7 @@ References: [Google web server OAuth flow](https://developers.google.com/identit
 
 ## Account manager
 
-Open `/Admin/login.php` for the dedicated admin sign-in page. Successful sign-in opens `/Admin/index.php` to manage the accounts in the database used by that deployment. Signed-out visitors to the account manager are redirected to sign-in. The manager lists names, emails, roles, registration dates, and submitted brief counts, with search, role filters, and pagination. App client and artist passwords do not grant admin access.
+Choose Admin on the homepage to open the sign-in modal. `/Admin/login.php` redirects signed-out visitors to that modal. Successful sign-in opens `/Admin/index.php` to manage the accounts in the database used by that deployment. Signed-out visitors to the account manager are redirected to sign-in. The manager lists names, emails, roles, registration dates, and submitted brief counts, with search, role filters, and pagination. App client and artist passwords do not grant admin access.
 
 To enable the live account manager:
 
@@ -139,3 +143,19 @@ Drafts use IndexedDB, with automatic migration of older localStorage drafts. Ske
 `client_brief_references` is added automatically through `ensure_database_schema()`, preserving existing `client_briefs.visual_data` images. If the deployment's database user cannot create tables, import the updated `auth/schema.sql` before using multiple references. Both client and artist detail pages display the collection; each download checks ownership or the artist's brief access. The PHP router exposes the upload endpoint and the draft/sketch scripts.
 
 Run `node tests/multiple-references.cjs` for an isolated temporary-database test covering 25 references, upload/submission retries, validation, atomic attachment, client/artist isolation, downloads, and legacy briefs. Run `node tests/run-sketchpad.cjs` for browser checks of draft migration, galleries, sketches, text boxes, and submission retries. The latter defaults to local Microsoft Edge; pass another Chromium executable as its first argument if needed.
+
+## Project progress and assignment
+
+1. The client shares the private project code from **My briefs**.
+2. An artist unlocks the brief using that code.
+3. The client opens the brief and selects that artist under **Project progress ? Choose responsible artist**.
+4. The assigned artist selects **Accept project**, **Start work**, then **Mark ready for review** as work progresses.
+5. The client selects **Request revisions** to return the project to In progress, or **Approve and complete** to finish it.
+
+Other artists who have unlocked the brief retain viewing access but cannot change progress. A client can reassign an unfinished project to another artist who has unlocked it; reassignment resets progress to Submitted and requires the new artist to accept. Completed projects cannot be reassigned or reopened in this version. If an assigned artist is deleted, the brief is retained and the client can reassign unfinished work.
+
+Existing briefs display Submitted until an artist is assigned. The additive brief_workflow table is created through the existing schema setup; database users without CREATE permission need the updated SQL schema imported before using this feature. Both MySQL and PostgreSQL schemas are provided. Local automated checks exercise MySQL; PostgreSQL still needs deployment verification.
+
+The progress buttons track work stages only. Artwork delivery, revision comments, messages, and notifications are not included. Stale forms are rejected so an older tab cannot overwrite a newer update; return to the brief to refresh before trying again.
+
+Run `node tests/run.cjs` for all 10 regression suites, including workflow access control, assignment, revisions, completion, stale submissions, and artist deletion.
