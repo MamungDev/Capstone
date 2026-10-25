@@ -13,6 +13,7 @@ unset($_SESSION['admin_login_error']);
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <?php require_once __DIR__ . '/auth/loading-screen.php'; loading_screen_head('landing'); ?>
     <meta name="description" content="Turn your next idea into a clear creative brief with Mamungkun. Find the words, set the mood, and bring your references together.">
     <meta name="theme-color" content="#f7f8fc">
     <title>Mamungkun &mdash; a place for your next idea</title>

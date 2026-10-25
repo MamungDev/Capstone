@@ -43,6 +43,7 @@ try {
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <?php require_once __DIR__ . '/../auth/loading-screen.php'; loading_screen_head('list'); ?>
     <title>My briefs &mdash; Mamungkun</title>
     <link rel="icon" href="../assets/mamungkun-icon.svg" type="image/svg+xml">
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&amp;family=Manrope:wght@400;600;700;800&amp;family=Playfair+Display:ital,wght@0,600;0,700;1,600&amp;display=swap" rel="stylesheet">

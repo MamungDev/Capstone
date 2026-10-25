@@ -113,6 +113,7 @@ $pages = 1;
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+    <?php require_once __DIR__ . '/../auth/loading-screen.php'; loading_screen_head('list'); ?>
   <meta name="robots" content="noindex, nofollow">
   <title>Manage accounts — Mamungkun</title>
   <link rel="icon" href="../assets/mamungkun-icon.svg" type="image/svg+xml">

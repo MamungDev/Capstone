@@ -31,6 +31,11 @@ function client(cookie = '') {
       body: data ? new URLSearchParams(data) : undefined });
     if (response.headers.get('set-cookie')) this.cookie = response.headers.get('set-cookie').split(';')[0];
     return { status: response.status, location: response.headers.get('location'), text: await response.text() };
+  }, async requestJson(route, data) {
+    const response = await fetch(base + route, { method: 'POST', redirect: 'manual',
+      headers: { Cookie: this.cookie, 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+    if (response.headers.get('set-cookie')) this.cookie = response.headers.get('set-cookie').split(';')[0];
+    return { status: response.status, body: await response.json() };
   }};
 }
 
@@ -81,14 +86,22 @@ function client(cookie = '') {
       const page = await user.request('auth/complete-profile.php');
       assert.equal(page.status, 200);
       assert.match(page.text, /Google Name/);
+      assert.match(page.text, /name="password"/);
+      assert.match(page.text, /name="password_confirmation"/);
       const csrf = page.text.match(/name="csrf" value="([a-f0-9]+)"/)[1];
-      const submit = data => user.request('auth/complete-profile.php', { csrf, name: 'Updated Name', bio: 'Creative work', ...data });
+      const password = 'A preferred password ' + role + ' 123';
+      const submit = data => user.request('auth/complete-profile.php', { csrf, name: 'Updated Name', bio: 'Creative work', password, password_confirmation: password, ...data });
       assert.equal((await submit({ csrf: 'wrong' })).status, 403);
       for (const name of ['', 'x'.repeat(101), 'bad\nname']) {
         assert.match((await submit({ name })).text, /Enter a display name/);
       }
       assert.match((await submit({ bio: 'x'.repeat(501) })).text, /Keep your bio/);
       assert.equal((await submit({ bio: 'x'.repeat(9000) })).status, 413);
+      assert.match((await submit({ password: '' })).text, /Choose a password of at least 8 characters/);
+      assert.match((await submit({ password: 'short' })).text, /Choose a password of at least 8 characters/);
+      assert.match((await submit({ password: 'x'.repeat(4097) })).text, /Choose a password of at least 8 characters/);
+      assert.match((await submit({ password_confirmation: '' })).text, /Your passwords do not match/);
+      assert.match((await submit({ password_confirmation: 'different password' })).text, /Your passwords do not match/);
       assert.equal((await user.request(workspace)).location, '../auth/complete-profile.php', 'Rejected submissions must not complete onboarding');
       const saved = await submit({});
       assert.equal(saved.status, 303);
@@ -98,13 +111,21 @@ function client(cookie = '') {
       assert.equal((await user.request('auth/complete-profile.php')).location, '../' + workspace);
       fixture(`
         $p->exec('USE '.$name);
-        $row = $p->query("SELECT display_name, bio, onboarding_pending FROM users WHERE email = '${role}@example.invalid'")->fetch(PDO::FETCH_ASSOC);
-        if ($row['display_name'] !== 'Updated Name' || $row['bio'] !== 'Creative work' || (int) $row['onboarding_pending'] !== 0) throw new RuntimeException('Profile was not persisted');
+        $row = $p->query("SELECT display_name, bio, onboarding_pending, password_hash, google_sub FROM users WHERE email = '${role}@example.invalid'")->fetch(PDO::FETCH_ASSOC);
+        if ($row['display_name'] !== 'Updated Name' || $row['bio'] !== 'Creative work' || (int) $row['onboarding_pending'] !== 0 || $row['google_sub'] !== '${sid}' || !password_verify('A preferred password ${role} 123', $row['password_hash'])) throw new RuntimeException('Profile or password was not persisted');
       `);
       assert.equal((await user.request('auth/logout.php', { csrf })).status, 303);
       assert.equal((await user.request(workspace)).status, 302);
+      const landing = await user.request('index.php');
+      const signinCsrf = JSON.parse(landing.text.match(/window\.MAMUNGKUN_AUTH\s*=\s*({[^;]+});/)[1]).csrf;
+      const wrongRole = role === 'client' ? 'artist' : 'client';
+      assert.equal((await user.requestJson('auth/account.php', { csrf: signinCsrf, action: 'signin', role: wrongRole, email: role + '@example.invalid', password })).status, 401);
+      const signedIn = await user.requestJson('auth/account.php', { csrf: signinCsrf, action: 'signin', role, email: role + '@example.invalid', password });
+      assert.equal(signedIn.status, 200);
+      assert.equal(signedIn.body.redirect, workspace);
+      assert.equal((await user.request(workspace)).status, 200);
     }
-    console.log('PASS: legacy profile migration, anonymous access, new client/artist onboarding, validation, CSRF, persistence, workspace redirects, role isolation, and sign-out.');
+    console.log('PASS: legacy profile migration, anonymous access, new client/artist onboarding, password validation and sign-in, CSRF, persistence, workspace redirects, role isolation, and sign-out.');
   } finally {
     if (server && server.exitCode === null) { const stopped = once(server, 'exit'); server.kill(); await stopped; }
     if (created) fixture("$p->exec('DROP DATABASE '.$name);");

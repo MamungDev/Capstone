@@ -35,6 +35,8 @@ $error = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $name = is_string($_POST['name'] ?? null) ? trim($_POST['name']) : '';
     $bio = is_string($_POST['bio'] ?? null) ? trim(str_replace(["\r\n", "\r"], "\n", $_POST['bio'])) : '';
+    $password = $_POST['password'] ?? null;
+    $confirmation = $_POST['password_confirmation'] ?? null;
     if ((int) ($_SERVER['CONTENT_LENGTH'] ?? 0) > 8192) {
         http_response_code(413);
         $error = 'Your profile is too large. Shorten your name or bio and try again.';
@@ -45,12 +47,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = 'Enter a display name between 1 and 100 characters.';
     } elseif (mb_strlen($bio) > 500) {
         $error = 'Keep your bio to 500 characters or fewer.';
+    } elseif (!is_string($password) || strlen($password) < 8 || strlen($password) > 4096) {
+        $error = 'Choose a password of at least 8 characters.';
+    } elseif (!is_string($confirmation) || !hash_equals($password, $confirmation)) {
+        $error = 'Your passwords do not match.';
     } else {
         try {
-            $statement = db()->prepare('UPDATE users SET display_name = ?, bio = ?, onboarding_pending = FALSE WHERE id = ? AND onboarding_pending = TRUE');
-            $statement->execute([$name, $bio === '' ? null : $bio, $user['id']]);
-            header('Location: ' . $workspace, true, 303);
-            exit;
+            $statement = db()->prepare('UPDATE users SET display_name = ?, bio = ?, password_hash = ?, onboarding_pending = FALSE WHERE id = ? AND onboarding_pending = TRUE AND google_sub IS NOT NULL');
+            $statement->execute([$name, $bio === '' ? null : $bio, password_hash($password, PASSWORD_DEFAULT), $user['id']]);
+            if ($statement->rowCount() !== 1) {
+                http_response_code(409);
+                $error = 'Your profile has already changed. Refresh this page to continue.';
+            } else {
+                header('Location: ' . $workspace, true, 303);
+                exit;
+            }
         } catch (PDOException $exception) {
             error_log('Google profile completion failed: ' . $exception->getMessage());
             http_response_code(503);
@@ -86,10 +97,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <p class="field-help">This is how your name appears in Mamungkun.</p>
       <label for="bio">About you <span>(optional)</span></label>
       <textarea id="bio" name="bio" rows="3" maxlength="500" placeholder="Tell us a little about yourself or your creative work."><?= profile_html($bio) ?></textarea>
+      <label for="password">Website password</label>
+      <input id="password" name="password" type="password" autocomplete="new-password" minlength="8" maxlength="4096" required aria-describedby="password-help">
+      <p class="field-help" id="password-help">At least 8 characters. You can use this password to sign in with your email.</p>
+      <label for="password-confirmation">Confirm password</label>
+      <input id="password-confirmation" name="password_confirmation" type="password" autocomplete="new-password" minlength="8" maxlength="4096" required>
       <div class="account-summary"><span><?= profile_html(ucfirst($user['role'])) ?> account</span><span><?= profile_html($user['email']) ?></span></div>
       <button type="submit">Continue to workspace</button>
     </form>
-    <p class="footer-note">You can edit your profile later. Your Google account handles sign-in, so no password is needed here.</p>
+    <p class="footer-note">You can sign in with Google or with your email and this password.</p>
     <form class="sign-out" method="post" action="logout.php">
       <input type="hidden" name="csrf" value="<?= profile_html(csrf_token()) ?>">
       <button type="submit">Use another account</button>

@@ -122,6 +122,7 @@ try {
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <?php require_once __DIR__ . '/../auth/loading-screen.php'; loading_screen_head('list'); ?>
     <meta name="theme-color" content="#f7f8fc">
     <title>Mamungkun &mdash; artist workspace</title>
     <link rel="icon" href="../assets/mamungkun-icon.svg" type="image/svg+xml">

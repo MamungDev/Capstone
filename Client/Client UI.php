@@ -8,6 +8,7 @@ $client = require_client_auth();
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <?php require_once __DIR__ . '/../auth/loading-screen.php'; loading_screen_head('workspace'); ?>
     <meta name="description" content="Shape your next idea into a creative brief in the Mamungkun client workspace.">
     <meta name="theme-color" content="#f7f8fc">
     <title>Mamungkun &mdash; client workspace</title>
