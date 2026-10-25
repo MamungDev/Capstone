@@ -170,6 +170,9 @@ unset($_SESSION['admin_login_error']);
           </form>
           <?php if ($googleEnabled): ?>
           <a class="auth-google" href="auth/google-start.php?role=client" hidden>
+          <?php else: ?>
+          <button class="auth-google" type="button" disabled hidden>
+          <?php endif; ?>
             <svg width="20" height="20" viewBox="0 0 48 48" aria-hidden="true" focusable="false">
               <path fill="#4285F4" d="M43.61 24.46c0-1.36-.12-2.66-.35-3.92H24v7.42h11a9.4 9.4 0 0 1-4.08 6.16v5.12h6.6c3.86-3.55 6.09-8.78 6.09-14.78z"/>
               <path fill="#34A853" d="M24 44c5.51 0 10.13-1.83 13.51-4.95l-6.6-5.12c-1.83 1.23-4.17 1.98-6.91 1.98-5.31 0-9.82-3.58-11.43-8.4H5.76v5.28A20 20 0 0 0 24 44z"/>
@@ -177,7 +180,11 @@ unset($_SESSION['admin_login_error']);
               <path fill="#EA4335" d="M24 12.09c3 0 5.68 1.03 7.8 3.05l5.85-5.85C34.1 5.98 29.51 4 24 4A20 20 0 0 0 5.76 15.21l6.81 5.28c1.61-4.82 6.12-8.4 11.43-8.4z"/>
             </svg>
             <span>Continue with Google</span>
+          <?php if ($googleEnabled): ?>
           </a>
+          <?php else: ?>
+          </button>
+          <p class="auth-google-note" hidden>Google sign-in is currently unavailable.</p>
           <?php endif; ?>
           <div class="auth-divider">
             <span>New here?</span>

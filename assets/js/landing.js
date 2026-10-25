@@ -10,6 +10,8 @@
   const confirm = find('#authConfirm');
   const status = find('.auth-status');
   const google = find('.auth-google');
+  const googleEnabled = google?.tagName === 'A';
+  const googleNote = find('.auth-google-note');
   let selectedRole = null;
   let mode = 'choose';
   let returnFocus;
@@ -28,8 +30,9 @@
     find('.auth-methods').hidden = choosing;
     if (google) {
       google.hidden = !(signin || signup);
-      google.href = 'auth/google-start.php?role=' + encodeURIComponent(selectedRole || 'client');
+      if (googleEnabled) google.href = 'auth/google-start.php?role=' + encodeURIComponent(selectedRole || 'client');
     }
+    if (googleNote) googleNote.hidden = !(signin || signup);
 
     for (const [field, input, shown] of [
       ['#authNameField', name, signup],
@@ -59,8 +62,8 @@
       : selectedRole === 'artist' ? 'Your next<br>creative chapter.' : 'Give your idea<br>a place to begin.';
     find('#auth-description').textContent = choosing ? 'How would you like to join Mamungkun?'
       : mode === 'forgot' ? 'Enter your account email and we’ll send a password reset link.'
-      : signup ? (google ? 'Continue with Google or create an account with your email.' : 'Start with your name, email, and a password.')
-      : `Sign in to your ${selectedRole} workspace${google ? ' with Google or your email and password.' : ' with your email and password.'}`;
+      : signup ? (googleEnabled ? 'Continue with Google or create an account with your email.' : 'Start with your name, email, and a password.')
+      : `Sign in to your ${selectedRole} workspace${googleEnabled ? ' with Google or your email and password.' : ' with your email and password.'}`;
     find('.auth-note').textContent = selectedRole === 'artist' && mode !== 'forgot'
       ? 'A space for artists and the ideas they bring to life.'
       : 'A space for your ideas and the people who bring them to life.';
