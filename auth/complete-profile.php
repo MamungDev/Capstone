@@ -97,7 +97,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <p class="field-help">This is how your name appears in Mamungkun.</p>
       <label for="bio">About you <span>(optional)</span></label>
       <textarea id="bio" name="bio" rows="3" maxlength="500" placeholder="Tell us a little about yourself or your creative work."><?= profile_html($bio) ?></textarea>
-      <label for="password">Website password</label>
+      <label for="password">Password</label>
       <input id="password" name="password" type="password" autocomplete="new-password" minlength="8" maxlength="4096" required aria-describedby="password-help">
       <p class="field-help" id="password-help">At least 8 characters. You can use this password to sign in with your email.</p>
       <label for="password-confirmation">Confirm password</label>
