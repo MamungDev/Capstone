@@ -106,9 +106,11 @@ try {
         if ($statement->fetch()) google_failure('email-exists');
         $name = mb_substr(trim((string) ($identity['name'] ?? '')), 0, 100);
         if ($name === '') $name = explode('@', $email)[0];
-        $statement = db()->prepare('INSERT INTO users (role, email, display_name, google_sub) VALUES (?, ?, ?, ?)');
+        $statement = db()->prepare(db_driver() === 'pgsql'
+            ? 'INSERT INTO users (role, email, display_name, google_sub) VALUES (?, ?, ?, ?) RETURNING id'
+            : 'INSERT INTO users (role, email, display_name, google_sub) VALUES (?, ?, ?, ?)');
         $statement->execute(['client', $email, $name, $sub]);
-        sign_in_user((int) db()->lastInsertId());
+        sign_in_user((int) (db_driver() === 'pgsql' ? $statement->fetchColumn() : db()->lastInsertId()));
     }
     header('Location: ../Client/Client%20UI.php', true, 303);
     exit;

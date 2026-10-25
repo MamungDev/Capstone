@@ -90,8 +90,11 @@ try {
             $json = json_encode($details, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
             $hash = hash('sha256', $json . "\0" . implode(',', array_map(static fn ($referenceId) => $referenceId . ':' . $references[$referenceId]['content_hash'], $referenceIds)) . "\0" . $accessCode);
         }
-        $insert = db()->prepare('INSERT INTO client_briefs (id, client_id, project_name, details_json, payload_hash, visual_mime, visual_data) VALUES (?, ?, ?, ?, ?, ?, ?)');
-        $insert->execute([$id, $client['id'], $details['projectName'], $json, $hash, $mime, $bytes]);
+        $insertSql = db_driver() === 'pgsql'
+            ? "INSERT INTO client_briefs (id, client_id, project_name, details_json, payload_hash, visual_mime, visual_data) VALUES (?, ?, ?, ?, ?, ?, decode(?, 'base64'))"
+            : 'INSERT INTO client_briefs (id, client_id, project_name, details_json, payload_hash, visual_mime, visual_data) VALUES (?, ?, ?, ?, ?, ?, ?)';
+        $insert = db()->prepare($insertSql);
+        $insert->execute([$id, $client['id'], $details['projectName'], $json, $hash, $mime, db_driver() === 'pgsql' && $bytes !== null ? base64_encode($bytes) : $bytes]);
         if ($referenceIds !== null) {
             $attach = db()->prepare('UPDATE client_brief_references SET brief_id = ?, position = ? WHERE id = ? AND client_id = ?');
             foreach ($referenceIds as $position => $referenceId) $attach->execute([$id, $position, $referenceId, $client['id']]);
@@ -101,7 +104,7 @@ try {
         $status = 201;
     } catch (PDOException $exception) {
         if (db()->inTransaction()) db()->rollBack();
-        if (($exception->errorInfo[1] ?? null) !== 1062) throw $exception;
+        if (!db_duplicate_error($exception)) throw $exception;
         // A lost response can be retried without creating a second brief.
         $existing = db()->prepare('SELECT payload_hash FROM client_briefs WHERE id = ? AND client_id = ?');
         $existing->execute([$id, $client['id']]);

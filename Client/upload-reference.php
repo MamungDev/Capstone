@@ -24,10 +24,12 @@ try {
     $image = reference_image($input['data']);
     $hash = hash('sha256', $name . "\0" . $kind . "\0" . $image['mime'] . "\0" . $image['bytes']);
     try {
-        db()->prepare('INSERT INTO client_brief_references (id, client_id, name, kind, mime, image_data, content_hash) VALUES (?, ?, ?, ?, ?, ?, ?)')
-            ->execute([$id, $client['id'], $name, $kind, $image['mime'], $image['bytes'], $hash]);
+        $insertSql = db_driver() === 'pgsql'
+            ? "INSERT INTO client_brief_references (id, client_id, name, kind, mime, image_data, content_hash) VALUES (?, ?, ?, ?, ?, decode(?, 'base64'), ?)"
+            : 'INSERT INTO client_brief_references (id, client_id, name, kind, mime, image_data, content_hash) VALUES (?, ?, ?, ?, ?, ?, ?)';
+        db()->prepare($insertSql)->execute([$id, $client['id'], $name, $kind, $image['mime'], db_driver() === 'pgsql' ? base64_encode($image['bytes']) : $image['bytes'], $hash]);
     } catch (PDOException $error) {
-        if (($error->errorInfo[1] ?? null) !== 1062) throw $error;
+        if (!db_duplicate_error($error)) throw $error;
         $query = db()->prepare('SELECT content_hash FROM client_brief_references WHERE id = ? AND client_id = ?');
         $query->execute([$id, $client['id']]);
         $previous = $query->fetchColumn();

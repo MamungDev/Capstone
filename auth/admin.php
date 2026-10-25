@@ -34,7 +34,10 @@ function admin_signin(string $password): string
     $pdo = db();
     $pdo->beginTransaction();
     try {
-        $query = $pdo->prepare('INSERT INTO admin_login_limits (bucket, attempts, window_end) VALUES (?, 0, 0) ON DUPLICATE KEY UPDATE bucket = bucket');
+        $insertLimit = db_driver() === 'pgsql'
+            ? 'INSERT INTO admin_login_limits (bucket, attempts, window_end) VALUES (?, 0, 0) ON CONFLICT (bucket) DO NOTHING'
+            : 'INSERT INTO admin_login_limits (bucket, attempts, window_end) VALUES (?, 0, 0) ON DUPLICATE KEY UPDATE bucket = bucket';
+        $query = $pdo->prepare($insertLimit);
         $query->execute([$bucket]);
         $query = $pdo->prepare('SELECT attempts, window_end FROM admin_login_limits WHERE bucket = ? FOR UPDATE');
         $query->execute([$bucket]);

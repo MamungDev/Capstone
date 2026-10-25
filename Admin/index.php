@@ -77,7 +77,9 @@ $target = null;
 $total = 0;
 $pages = 1;
     try {
-        $counts = db()->query("SELECT COUNT(*) AS total, COALESCE(SUM(role = 'client'), 0) AS clients, COALESCE(SUM(role = 'artist'), 0) AS artists FROM users")->fetch();
+        $clientCount = db_driver() === 'pgsql' ? "SUM((role = 'client')::int)" : "SUM(role = 'client')";
+        $artistCount = db_driver() === 'pgsql' ? "SUM((role = 'artist')::int)" : "SUM(role = 'artist')";
+        $counts = db()->query('SELECT COUNT(*) AS total, COALESCE(' . $clientCount . ', 0) AS clients, COALESCE(' . $artistCount . ', 0) AS artists FROM users')->fetch();
         $conditions = [];
         $params = [];
         if ($search !== '') {

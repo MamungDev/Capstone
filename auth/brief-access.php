@@ -11,7 +11,10 @@ function client_brief_code(string $id, int $clientId): string
     $query->execute([$id, $clientId]);
     if (!$query->fetchColumn()) throw new RuntimeException('Brief not found.');
     // Backfill older briefs only for their owner. They stay private until shared.
-    $query = db()->prepare('INSERT INTO brief_access_codes (brief_id, access_code) VALUES (?, ?) ON DUPLICATE KEY UPDATE brief_id = brief_id');
+    $sql = db_driver() === 'pgsql'
+        ? 'INSERT INTO brief_access_codes (brief_id, access_code) VALUES (?, ?) ON CONFLICT (brief_id) DO NOTHING'
+        : 'INSERT INTO brief_access_codes (brief_id, access_code) VALUES (?, ?) ON DUPLICATE KEY UPDATE brief_id = brief_id';
+    $query = db()->prepare($sql);
     $query->execute([$id, bin2hex(random_bytes(16))]);
     $query = db()->prepare('SELECT access_code FROM brief_access_codes WHERE brief_id = ?');
     $query->execute([$id]);

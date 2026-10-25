@@ -47,7 +47,26 @@ Run `node tests/admin-accounts.cjs` with XAMPP MySQL running to check admin auth
 
 ## Vercel deployment
 
-Vercel runs this PHP project through the community `vercel-php` runtime configured in `vercel.json`. Import the GitHub repository `MamungDev/Capstone` in Vercel, leave the root directory as `.`, choose the **Other** framework preset, and leave the build command and output directory empty. The XAMPP database at `127.0.0.1` is only available on your computer; Vercel needs a hosted MySQL service such as Aiven.
+Vercel runs this PHP project through the community `vercel-php` runtime configured in `vercel.json`. Import the GitHub repository `MamungDev/Capstone` in Vercel, leave the root directory as `.`, choose the **Other** framework preset, and leave the build command and output directory empty. The XAMPP database at `127.0.0.1` is only available on your computer; Vercel needs a hosted database such as Aiven MySQL or Supabase PostgreSQL.
+
+### Supabase PostgreSQL
+
+The app can use Supabase PostgreSQL while local XAMPP remains on MySQL. In Supabase, open **Connect → Direct → Transaction pooler** and use its host, port, and username. Vercel uses short-lived serverless connections, so choose the transaction pooler; its port is normally `6543`. The pooler does not support server-side prepared statements, so the PHP PostgreSQL connection uses emulated prepares.
+
+Add these environment variables in **Vercel → Project → Settings → Environment Variables** for the environments you will deploy, then redeploy:
+
+| Variable | Value |
+| --- | --- |
+| `DB_DRIVER` | `pgsql` |
+| `DB_HOST` | Pooler host from the Supabase connection string |
+| `DB_PORT` | Pooler port, normally `6543` |
+| `DB_NAME` | `postgres` |
+| `DB_USER` | Pooler username from the connection string, including the project reference |
+| `DB_PASSWORD` | The database password you chose when creating the project |
+| `DB_SSLMODE` | `require` |
+| `SESSION_DRIVER` | `pgsql` |
+
+Keep `DB_PASSWORD` sensitive and out of Git and chat. The app creates the PostgreSQL tables from `auth/schema.postgres.sql` on its first deployed request. Local XAMPP continues to use `auth/schema.sql` and does not need these Supabase environment variables. Existing MySQL accounts and briefs are not copied automatically; export/import them as a separate migration after the Supabase connection is confirmed.
 
 ### Aiven MySQL
 

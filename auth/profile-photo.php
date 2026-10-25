@@ -5,10 +5,12 @@ if (!isset($profileRole) || !in_array($profileRole, ['artist', 'client'], true))
 $profileUser = current_user();
 if (!$profileUser || $profileUser['role'] !== $profileRole) json_response(['error' => 'Please sign in to view your profile photo.'], 401);
 try {
-    $statement = db()->prepare('SELECT photo_mime, photo_data FROM users WHERE id = ? AND role = ?');
+    $photoColumn = db_driver() === 'pgsql' ? "encode(photo_data, 'base64') AS photo_data" : 'photo_data';
+    $statement = db()->prepare('SELECT photo_mime, ' . $photoColumn . ' FROM users WHERE id = ? AND role = ?');
     $statement->execute([$profileUser['id'], $profileRole]);
     $photo = $statement->fetch();
     if (!$photo || $photo['photo_data'] === null) json_response(['error' => 'No profile photo.'], 404);
+    if (db_driver() === 'pgsql') $photo['photo_data'] = base64_decode((string) $photo['photo_data'], true);
     if (!in_array($photo['photo_mime'], ['image/jpeg', 'image/png', 'image/webp'], true)) {
         json_response(['error' => 'Unsupported photo.'], 415);
     }

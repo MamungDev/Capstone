@@ -5,10 +5,11 @@ $isVercel = getenv('VERCEL') !== false;
 if (session_status() !== PHP_SESSION_ACTIVE) {
     $sessionDriver = getenv('SESSION_DRIVER');
     if ($sessionDriver === false || $sessionDriver === '') {
-        $sessionDriver = $isVercel ? 'mysql' : 'files';
+        $configuredDbDriver = getenv('DB_DRIVER');
+        $sessionDriver = $isVercel ? (($configuredDbDriver === 'pgsql') ? 'pgsql' : 'mysql') : 'files';
     }
-    if ($isVercel && $sessionDriver !== 'mysql') {
-        throw new RuntimeException('Vercel deployments require SESSION_DRIVER=mysql.');
+    if ($isVercel && !in_array($sessionDriver, ['mysql', 'pgsql'], true)) {
+        throw new RuntimeException('Vercel deployments require SESSION_DRIVER=mysql or pgsql.');
     }
     ini_set('session.use_strict_mode', '1');
     ini_set('session.use_only_cookies', '1');
@@ -23,7 +24,7 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
         'samesite' => 'Lax',
     ]);
 
-    if ($sessionDriver === 'mysql') {
+    if (in_array($sessionDriver, ['mysql', 'pgsql'], true)) {
         if ($isVercel) ensure_database_schema();
         $sessionPdo = null;
         $getSessionPdo = static function () use (&$sessionPdo): PDO {
@@ -42,17 +43,24 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 
             public function read(string $id): string|false
             {
-                $statement = $this->pdo()->prepare('SELECT session_data FROM app_sessions WHERE session_id = ? AND expires_at > ?');
+                $sql = db_driver() === 'pgsql'
+                    ? "SELECT encode(session_data, 'base64') FROM app_sessions WHERE session_id = ? AND expires_at > ?"
+                    : 'SELECT session_data FROM app_sessions WHERE session_id = ? AND expires_at > ?';
+                $statement = $this->pdo()->prepare($sql);
                 $statement->execute([$id, time()]);
                 $data = $statement->fetchColumn();
+                if (db_driver() === 'pgsql' && is_string($data)) $data = base64_decode($data, true);
                 return is_string($data) ? $data : '';
             }
 
             public function write(string $id, string $data): bool
             {
                 $expiresAt = time() + (int) ini_get('session.gc_maxlifetime');
-                $statement = $this->pdo()->prepare('INSERT INTO app_sessions (session_id, session_data, expires_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE session_data = ?, expires_at = ?');
-                return $statement->execute([$id, $data, $expiresAt, $data, $expiresAt]);
+                $sql = db_driver() === 'pgsql'
+                    ? "INSERT INTO app_sessions (session_id, session_data, expires_at) VALUES (?, decode(?, 'base64'), ?) ON CONFLICT (session_id) DO UPDATE SET session_data = EXCLUDED.session_data, expires_at = EXCLUDED.expires_at"
+                    : 'INSERT INTO app_sessions (session_id, session_data, expires_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE session_data = ?, expires_at = ?';
+                $statement = $this->pdo()->prepare($sql);
+                return $statement->execute(db_driver() === 'pgsql' ? [$id, base64_encode($data), $expiresAt] : [$id, $data, $expiresAt, $data, $expiresAt]);
             }
 
             public function destroy(string $id): bool
@@ -97,6 +105,8 @@ function app_config(): array
             'db_name' => 'DB_NAME',
             'db_user' => 'DB_USER',
             'db_password' => 'DB_PASSWORD',
+            'db_driver' => 'DB_DRIVER',
+            'db_sslmode' => 'DB_SSLMODE',
             'db_ssl_ca' => 'DB_SSL_CA',
             'db_ssl_ca_pem' => 'DB_SSL_CA_PEM',
             'admin_password' => 'ADMIN_PASSWORD',
@@ -108,7 +118,7 @@ function app_config(): array
             if ($value !== false && $value !== '') $config[$key] = $value;
         }
         if (getenv('VERCEL') !== false) {
-            foreach (['DB_HOST', 'DB_NAME', 'DB_USER', 'DB_PASSWORD', 'DB_SSL_CA_PEM'] as $name) {
+            foreach (['DB_DRIVER', 'DB_HOST', 'DB_NAME', 'DB_USER', 'DB_PASSWORD'] as $name) {
                 if (getenv($name) === false || getenv($name) === '') {
                     throw new RuntimeException('Missing required deployment configuration: ' . $name . '.');
                 }
@@ -123,20 +133,46 @@ function db(): PDO
     static $pdo = null;
     if ($pdo === null) {
         $config = app_config();
-        $port = filter_var($config['db_port'] ?? 3306, FILTER_VALIDATE_INT, [
+        $driver = db_driver();
+        $port = filter_var($config['db_port'] ?? ($driver === 'pgsql' ? 5432 : 3306), FILTER_VALIDATE_INT, [
             'options' => ['min_range' => 1, 'max_range' => 65535],
         ]);
         if ($port === false) throw new RuntimeException('DB_PORT must be a valid TCP port.');
-        $dsn = sprintf('mysql:host=%s;port=%d;dbname=%s;charset=utf8mb4', $config['db_host'], $port, $config['db_name']);
+        if ($driver === 'pgsql') {
+            $sslmode = $config['db_sslmode'] ?? 'require';
+            if (!in_array($sslmode, ['require', 'verify-ca', 'verify-full'], true)) throw new RuntimeException('DB_SSLMODE must be require, verify-ca, or verify-full.');
+            $dsn = sprintf('pgsql:host=%s;port=%d;dbname=%s;sslmode=%s', $config['db_host'], $port, $config['db_name'], $sslmode);
+        } else {
+            $dsn = sprintf('mysql:host=%s;port=%d;dbname=%s;charset=utf8mb4', $config['db_host'], $port, $config['db_name']);
+        }
         $options = [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            PDO::ATTR_EMULATE_PREPARES => false,
+            // Supavisor's transaction pooler does not support server-side prepared statements.
+            PDO::ATTR_EMULATE_PREPARES => $driver === 'pgsql',
         ];
-        $options += mysql_ssl_options($config);
+        if ($driver === 'mysql') $options += mysql_ssl_options($config);
         $pdo = new PDO($dsn, $config['db_user'], $config['db_password'], $options);
     }
     return $pdo;
+}
+
+function db_driver(): string
+{
+    static $driver = null;
+    if ($driver === null) {
+        $config = app_config();
+        $driver = (string) ($config['db_driver'] ?? 'mysql');
+        if (!in_array($driver, ['mysql', 'pgsql'], true)) throw new RuntimeException('DB_DRIVER must be mysql or pgsql.');
+    }
+    return $driver;
+}
+
+function db_duplicate_error(PDOException $exception): bool
+{
+    return db_driver() === 'pgsql'
+        ? $exception->getCode() === '23505'
+        : $exception->getCode() === '23000' || ($exception->errorInfo[1] ?? null) === 1062;
 }
 
 function ensure_database_schema(): void
@@ -151,12 +187,14 @@ function ensure_database_schema(): void
         db()->query('SELECT 1 FROM admin_login_limits LIMIT 0');
         return;
     } catch (PDOException $error) {
-        if ($error->getCode() !== '42S02') throw $error;
+        $missingTable = db_driver() === 'pgsql' ? $error->getCode() === '42P01' : $error->getCode() === '42S02';
+        if (!$missingTable) throw $error;
     }
 
     // The checked-in schema uses CREATE TABLE IF NOT EXISTS, so concurrent
     // cold starts and existing accounts/briefs remain safe.
-    $schema = file_get_contents(__DIR__ . '/schema.sql');
+    $schemaFile = db_driver() === 'pgsql' ? 'schema.postgres.sql' : 'schema.sql';
+    $schema = file_get_contents(__DIR__ . '/' . $schemaFile);
     if ($schema === false) throw new RuntimeException('Database schema file is missing.');
     $schema = preg_replace('/^\s*--[^\r\n]*$/m', '', $schema);
     foreach (explode(';', $schema) as $statement) {
@@ -220,13 +258,22 @@ function current_user(): ?array
         try {
             $statement = db()->prepare($sql);
         } catch (PDOException $exception) {
-            if (($exception->errorInfo[1] ?? null) !== 1054) throw $exception;
+            $unknownColumn = db_driver() === 'pgsql'
+                ? $exception->getCode() === '42703'
+                : (($exception->errorInfo[1] ?? null) === 1054);
+            if (!$unknownColumn) throw $exception;
             // Upgrade existing installations; fresh databases include these columns.
-            foreach (['bio VARCHAR(500) NULL', 'photo_mime VARCHAR(20) NULL', 'photo_data MEDIUMBLOB NULL'] as $column) {
+            $columns = db_driver() === 'pgsql'
+                ? ['bio VARCHAR(500) NULL', 'photo_mime VARCHAR(20) NULL', 'photo_data BYTEA NULL']
+                : ['bio VARCHAR(500) NULL', 'photo_mime VARCHAR(20) NULL', 'photo_data MEDIUMBLOB NULL'];
+            foreach ($columns as $column) {
                 try {
                     db()->exec('ALTER TABLE users ADD COLUMN ' . $column);
                 } catch (PDOException $migrationError) {
-                    if (($migrationError->errorInfo[1] ?? null) !== 1060) throw $migrationError;
+                    $duplicateColumn = db_driver() === 'pgsql'
+                        ? $migrationError->getCode() === '42701'
+                        : (($migrationError->errorInfo[1] ?? null) === 1060);
+                    if (!$duplicateColumn) throw $migrationError;
                 }
             }
             $statement = db()->prepare($sql);

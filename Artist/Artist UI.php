@@ -41,7 +41,10 @@ try {
         $code = is_string($_POST['access_code'] ?? null) ? strtolower(trim($_POST['access_code'])) : '';
         $bucket = hash('sha256', 'brief-unlock:' . $artist['id']);
         $now = time();
-        db()->prepare('INSERT INTO admin_login_limits (bucket, attempts, window_end) VALUES (?, 1, ?) ON DUPLICATE KEY UPDATE attempts = IF(window_end <= ?, 1, attempts + 1), window_end = IF(window_end <= ?, VALUES(window_end), window_end)')->execute([$bucket, $now + 900, $now, $now]);
+        $limitSql = db_driver() === 'pgsql'
+            ? 'INSERT INTO admin_login_limits (bucket, attempts, window_end) VALUES (?, 1, ?) ON CONFLICT (bucket) DO UPDATE SET attempts = CASE WHEN admin_login_limits.window_end <= ? THEN 1 ELSE admin_login_limits.attempts + 1 END, window_end = CASE WHEN admin_login_limits.window_end <= ? THEN EXCLUDED.window_end ELSE admin_login_limits.window_end END'
+            : 'INSERT INTO admin_login_limits (bucket, attempts, window_end) VALUES (?, 1, ?) ON DUPLICATE KEY UPDATE attempts = IF(window_end <= ?, 1, attempts + 1), window_end = IF(window_end <= ?, VALUES(window_end), window_end)';
+        db()->prepare($limitSql)->execute([$bucket, $now + 900, $now, $now]);
         $limit = db()->prepare('SELECT attempts FROM admin_login_limits WHERE bucket = ?');
         $limit->execute([$bucket]);
         if ((int) $limit->fetchColumn() > 10) {
@@ -52,7 +55,10 @@ try {
             $lookup->execute([preg_match('/^[a-f0-9]{32}$/D', $code) ? $code : '']);
             $unlockedId = $lookup->fetchColumn();
             if ($unlockedId) {
-                db()->prepare('INSERT INTO brief_artist_access (brief_id, artist_id) VALUES (?, ?) ON DUPLICATE KEY UPDATE artist_id = artist_id')->execute([$unlockedId, $artist['id']]);
+                $accessSql = db_driver() === 'pgsql'
+                    ? 'INSERT INTO brief_artist_access (brief_id, artist_id) VALUES (?, ?) ON CONFLICT (brief_id, artist_id) DO NOTHING'
+                    : 'INSERT INTO brief_artist_access (brief_id, artist_id) VALUES (?, ?) ON DUPLICATE KEY UPDATE artist_id = artist_id';
+                db()->prepare($accessSql)->execute([$unlockedId, $artist['id']]);
                 header('Location: Artist%20UI.php?id=' . $unlockedId, true, 303);
                 exit;
             }
@@ -73,7 +79,8 @@ try {
             $references = brief_reference_list($brief, $details);
         }
     } else {
-        $query = db()->prepare('SELECT COUNT(*) AS total, COALESCE(SUM(visual_mime IS NOT NULL), 0) AS visual, COUNT(DISTINCT client_id) AS clients FROM client_briefs b JOIN brief_artist_access a ON a.brief_id = b.id WHERE a.artist_id = ?');
+        $visualCount = db_driver() === 'pgsql' ? 'SUM((visual_mime IS NOT NULL)::int)' : 'SUM(visual_mime IS NOT NULL)';
+        $query = db()->prepare('SELECT COUNT(*) AS total, COALESCE(' . $visualCount . ', 0) AS visual, COUNT(DISTINCT client_id) AS clients FROM client_briefs b JOIN brief_artist_access a ON a.brief_id = b.id WHERE a.artist_id = ?');
         $query->execute([$artist['id']]);
         $stats = $query->fetch();
         $where = ['EXISTS (SELECT 1 FROM brief_artist_access a WHERE a.brief_id = b.id AND a.artist_id = ?)'];
@@ -81,11 +88,14 @@ try {
         if ($search !== '') {
             // Treat SQL wildcard characters as literal search text.
             $term = '%' . str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $search) . '%';
-            $where[] = "(b.project_name LIKE ? ESCAPE '!' OR u.display_name LIKE ? ESCAPE '!' OR JSON_UNQUOTE(JSON_EXTRACT(b.details_json, '$.idea')) LIKE ? ESCAPE '!')";
+            $ideaExpression = db_driver() === 'pgsql' ? "b.details_json::jsonb ->> 'idea'" : "JSON_UNQUOTE(JSON_EXTRACT(b.details_json, '$.idea'))";
+            $where[] = "(b.project_name LIKE ? ESCAPE '!' OR u.display_name LIKE ? ESCAPE '!' OR $ideaExpression LIKE ? ESCAPE '!')";
             array_push($params, $term, $term, $term);
         }
         if ($type !== '') {
-            $where[] = "JSON_UNQUOTE(JSON_EXTRACT(b.details_json, '$.projectType')) = ?";
+            $where[] = db_driver() === 'pgsql'
+                ? "b.details_json::jsonb ->> 'projectType' = ?"
+                : "JSON_UNQUOTE(JSON_EXTRACT(b.details_json, '$.projectType')) = ?";
             $params[] = $type;
         }
         if ($withVisual) $where[] = 'b.visual_mime IS NOT NULL';

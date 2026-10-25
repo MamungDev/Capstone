@@ -54,8 +54,8 @@ try {
     $sql = 'UPDATE users SET display_name = ?, email = ?, bio = ?';
     $params = [$name, $email, $bio];
     if ($changePhoto) {
-        $sql .= ', photo_mime = ?, photo_data = ?';
-        array_push($params, $photoMime, $photoData);
+        $sql .= db_driver() === 'pgsql' ? ", photo_mime = ?, photo_data = decode(?, 'base64')" : ', photo_mime = ?, photo_data = ?';
+        array_push($params, $photoMime, db_driver() === 'pgsql' && $photoData !== null ? base64_encode($photoData) : $photoData);
     }
     $statement = db()->prepare($sql . ' WHERE id = ? AND role = ?');
     $statement->execute([...$params, $profileUser['id'], $profileRole]);
@@ -67,7 +67,7 @@ try {
         'photoUrl' => ($changePhoto ? $photoMime !== null : !empty($profileUser['photo_mime'])) ? 'profile-photo.php?v=' . bin2hex(random_bytes(8)) : null,
     ]]);
 } catch (PDOException $exception) {
-    if (($exception->errorInfo[1] ?? null) === 1062) {
+    if (db_duplicate_error($exception)) {
         json_response(['error' => 'That email address is already in use. Try another one.', 'field' => 'email'], 409);
     }
     error_log('Profile update error: ' . $exception->getMessage());

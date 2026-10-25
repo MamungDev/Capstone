@@ -43,14 +43,16 @@ try {
         if ($name === '' || mb_strlen($name) > 100 || strlen($password) < 8) {
             json_response(['error' => 'Enter your name and a password of at least 8 characters.'], 422);
         }
-        $statement = db()->prepare('INSERT INTO users (role, email, display_name, password_hash) VALUES (?, ?, ?, ?)');
+        $statement = db()->prepare(db_driver() === 'pgsql'
+            ? 'INSERT INTO users (role, email, display_name, password_hash) VALUES (?, ?, ?, ?) RETURNING id'
+            : 'INSERT INTO users (role, email, display_name, password_hash) VALUES (?, ?, ?, ?)');
         try {
             $statement->execute([$role, $email, $name, password_hash($password, PASSWORD_DEFAULT)]);
         } catch (PDOException $exception) {
-            if ($exception->getCode() === '23000') json_response(['error' => 'An account already uses this email. Sign in instead.'], 409);
+            if (db_duplicate_error($exception)) json_response(['error' => 'An account already uses this email. Sign in instead.'], 409);
             throw $exception;
         }
-        sign_in_user((int) db()->lastInsertId());
+        sign_in_user((int) (db_driver() === 'pgsql' ? $statement->fetchColumn() : db()->lastInsertId()));
     } else {
         $statement = db()->prepare('SELECT id, role, password_hash FROM users WHERE email = ? LIMIT 1');
         $statement->execute([$email]);
