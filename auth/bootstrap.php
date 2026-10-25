@@ -110,6 +110,7 @@ function app_config(): array
             'db_ssl_ca' => 'DB_SSL_CA',
             'db_ssl_ca_pem' => 'DB_SSL_CA_PEM',
             'admin_password' => 'ADMIN_PASSWORD',
+            'admin_mfa_key' => 'ADMIN_MFA_KEY',
             'google_client_id' => 'GOOGLE_CLIENT_ID',
             'google_client_secret' => 'GOOGLE_CLIENT_SECRET',
             'google_redirect_uri' => 'GOOGLE_REDIRECT_URI',
@@ -177,6 +178,8 @@ function db_duplicate_error(PDOException $exception): bool
 
 function ensure_database_schema(): void
 {
+    static $checked = false;
+    if ($checked) return;
     try {
         db()->query('SELECT 1 FROM app_sessions LIMIT 0');
         db()->query('SELECT 1 FROM users LIMIT 0');
@@ -186,6 +189,13 @@ function ensure_database_schema(): void
         db()->query('SELECT 1 FROM brief_artist_access LIMIT 0');
         db()->query('SELECT 1 FROM brief_workflow LIMIT 0');
         db()->query('SELECT 1 FROM admin_login_limits LIMIT 0');
+        db()->query('SELECT 1 FROM admin_accounts LIMIT 0');
+        db()->query('SELECT 1 FROM admin_audit LIMIT 0');
+        db()->query('SELECT 1 FROM admin_invites LIMIT 0');
+        db()->query('SELECT 1 FROM admin_security_lock LIMIT 0');
+        db()->query('SELECT 1 FROM account_controls LIMIT 0');
+        db()->query('SELECT 1 FROM password_reset_tokens LIMIT 0');
+        $checked = true;
         return;
     } catch (PDOException $error) {
         $missingTable = db_driver() === 'pgsql' ? $error->getCode() === '42P01' : $error->getCode() === '42S02';
@@ -202,6 +212,7 @@ function ensure_database_schema(): void
         $statement = trim($statement);
         if ($statement !== '') db()->exec($statement);
     }
+    $checked = true;
 }
 
 function mysql_ssl_options(array $config): array
@@ -281,6 +292,8 @@ function current_user(): ?array
     $id = $_SESSION['user_id'] ?? null;
     if (!is_int($id) || $id < 1) return null;
     try {
+        $control = account_control($id);
+        if ((int) $control['suspended'] === 1 || (int) $control['session_version'] !== (int) ($_SESSION['user_auth_version'] ?? 0)) return null;
         ensure_onboarding_column();
         $sql = 'SELECT id, role, email, display_name, bio, photo_mime, onboarding_pending, (photo_data IS NOT NULL) AS has_profile_photo FROM users WHERE id = ? LIMIT 1';
         try {
@@ -318,10 +331,21 @@ function current_user(): ?array
 
 function sign_in_user(int $id): void
 {
+    $control = account_control($id);
+    if ((int) $control['suspended'] === 1) throw new DomainException('account-unavailable');
     session_regenerate_id(true);
     $_SESSION['user_id'] = $id;
+    $_SESSION['user_auth_version'] = (int) $control['session_version'];
     unset($_SESSION['csrf_token']);
     csrf_token();
+}
+
+function account_control(int $id): array
+{
+    ensure_database_schema();
+    $query = db()->prepare('SELECT suspended, session_version FROM account_controls WHERE user_id = ?');
+    $query->execute([$id]);
+    return $query->fetch() ?: ['suspended' => 0, 'session_version' => 0];
 }
 
 function json_response(array $data, int $status = 200): never

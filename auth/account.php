@@ -65,6 +65,8 @@ try {
     }
     $redirect = $role === 'client' ? 'Client/Client%20UI.php' : 'Artist/Artist%20UI.php';
     json_response(['ok' => true, 'csrf' => csrf_token(), 'redirect' => $redirect]);
+} catch (DomainException $exception) {
+    json_response(['error' => 'This account is unavailable. Contact the site administrator.'], 403);
 } catch (PDOException $exception) {
     error_log('Account auth database error: ' . $exception->getMessage());
     json_response(['error' => 'Sign-in is temporarily unavailable. Please try again.'], 503);

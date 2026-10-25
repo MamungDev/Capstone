@@ -144,5 +144,5 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 22px 0; }
 }
 .unlock-card { margin-bottom: 24px; }
 .unlock-form { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
-.unlock-form input[type="password"] { flex: 1; min-width: 200px; border: 1px solid #d7dfef; border-radius: 10px; padding: 14px; font: inherit; }
+.unlock-form input[name="access_code"] { flex: 1; min-width: 200px; border: 1px solid #d7dfef; border-radius: 10px; padding: 14px; font: inherit; }
 #unlock-error { color: #a33b2b; }

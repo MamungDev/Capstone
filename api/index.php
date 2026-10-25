@@ -41,6 +41,8 @@ $pages = [
 ];
 
 $assets = [
+    '/assets/css/password-toggle.css' => ['assets/css/password-toggle.css', 'text/css'],
+    '/assets/js/password-toggle.js' => ['assets/js/password-toggle.js', 'text/javascript'],
     '/assets/mamungkun-icon.svg' => ['assets/mamungkun-icon.svg', 'image/svg+xml'],
     '/assets/css/landing.css' => ['assets/css/landing.css', 'text/css'],
     '/assets/css/auth.css' => ['assets/css/auth.css', 'text/css'],

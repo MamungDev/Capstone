@@ -20,13 +20,18 @@ try {
         http_response_code(403);
         throw new DomainException('Your session expired. Refresh this page and try again.');
     }
-    $result = admin_authorized() ? 'ok' : admin_signin(is_string($_POST['password'] ?? null) ? $_POST['password'] : '');
+    if ((int) ($_SERVER['CONTENT_LENGTH'] ?? 0) > 8192) throw new DomainException('Request too large.');
+    $result = admin_authorized() ? 'ok' : admin_signin(
+        is_string($_POST['email'] ?? null) ? $_POST['email'] : '',
+        is_string($_POST['password'] ?? null) ? $_POST['password'] : '',
+        is_string($_POST['code'] ?? null) ? $_POST['code'] : ''
+    );
     if ($result !== 'ok') {
         http_response_code($result === 'limited' ? 429 : 403);
         throw new DomainException(match ($result) {
             'disabled' => 'Admin sign-in is unavailable until the site owner completes setup.',
             'limited' => 'Too many sign-in attempts. Please try again in 15 minutes.',
-            default => 'The admin password is incorrect. Please try again.',
+            default => 'The email, password, or verification code is incorrect.',
         });
     }
     if ($json) json_response(['ok' => true]);

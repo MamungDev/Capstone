@@ -14,7 +14,7 @@
     }
     modal.showModal();
     document.body.classList.add('auth-open');
-    password.focus({ preventScroll: true });
+    form.querySelector('[name="email"]').focus({ preventScroll: true });
   }
   trigger.addEventListener('click', event => {
     event.preventDefault();
@@ -26,6 +26,7 @@
   modal.addEventListener('close', () => {
     if (!document.querySelector('dialog[open]')) document.body.classList.remove('auth-open');
     password.value = '';
+    form.querySelector('[name="code"]').value = '';
     trigger.focus({ preventScroll: true });
   });
   form.addEventListener('submit', async event => {

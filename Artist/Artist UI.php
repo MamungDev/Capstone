@@ -134,6 +134,8 @@ try {
     <script src="../assets/js/dropdowns.js?v=<?= filemtime(__DIR__ . '/../assets/js/dropdowns.js') ?>" defer></script>
     <link rel="stylesheet" href="../assets/css/profile.css?v=<?= filemtime(__DIR__ . '/../assets/css/profile.css') ?>">
   <link rel="stylesheet" href="../assets/css/workflow.css">
+    <link rel="stylesheet" href="../assets/css/password-toggle.css?v=<?= filemtime(__DIR__ . '/../assets/css/password-toggle.css') ?>">
+    <script src="../assets/js/password-toggle.js?v=<?= filemtime(__DIR__ . '/../assets/js/password-toggle.js') ?>" defer></script>
   </head>
   <body>
     <a class="skip-link" href="#artist-main">Skip to briefs</a>

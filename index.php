@@ -29,6 +29,8 @@ unset($_SESSION['admin_login_error']);
     ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_INVALID_UTF8_SUBSTITUTE) ?>;</script>
     <script src="assets/js/landing.js?v=<?= filemtime(__DIR__ . '/assets/js/landing.js') ?>" defer></script>
     <script src="assets/js/admin-modal.js" defer></script>
+    <link rel="stylesheet" href="assets/css/password-toggle.css?v=<?= filemtime(__DIR__ . '/assets/css/password-toggle.css') ?>">
+    <script src="assets/js/password-toggle.js?v=<?= filemtime(__DIR__ . '/assets/js/password-toggle.js') ?>" defer></script>
   </head>
   <body id="home">
     <div id="landing">
@@ -207,16 +209,21 @@ unset($_SESSION['admin_login_error']);
         <form id="admin-form" class="auth-email-form" method="post" action="Admin/login.php">
           <input type="hidden" name="csrf" value="<?= htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8') ?>">
           <div class="auth-field">
+            <label for="admin-email">Admin email</label>
+            <input id="admin-email" name="email" type="email" autocomplete="username" required maxlength="254">
+          </div>
+          <div class="auth-field">
             <label for="admin-password">Admin password</label>
             <input id="admin-password" name="password" type="password" autocomplete="current-password" required maxlength="4096" placeholder="Enter your admin password">
           </div>
-          <button class="auth-submit" type="submit" <?= $adminStatus !== 'ready' ? 'disabled' : '' ?>>Sign in to admin</button>
+          <div class="auth-field">
+            <label for="admin-code">Authenticator or recovery code</label>
+            <input id="admin-code" name="code" type="text" autocomplete="one-time-code" required maxlength="32" spellcheck="false">
+          </div>
+          <button class="auth-submit" type="submit">Sign in to admin</button>
         </form>
         <p class="auth-status" role="status" aria-live="polite" <?= $adminError === '' ? 'hidden' : '' ?>><?= htmlspecialchars((string) $adminError, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?></p>
-        <?php if ($adminStatus !== 'ready'): ?>
-          <p class="auth-status"><?php if ($adminStatus === 'short'): ?>The saved admin password is shorter than 16 characters. Set a longer ADMIN_PASSWORD in Vercel and redeploy.<?php else: ?>This deployment has no ADMIN_PASSWORD. Save a password of at least 16 characters for Production in Vercel, then redeploy.<?php endif; ?></p>
-        <?php endif; ?>
-        <p class="auth-note">Account management for authorized administrators.</p>
+        <p class="auth-note">Use your named administrator account. <a href="Admin/setup.php">First administrator setup</a></p>
         <button class="auth-cancel" type="button">Back to exploring</button>
       </div>
     </dialog>

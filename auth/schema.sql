@@ -93,3 +93,49 @@ CREATE TABLE IF NOT EXISTS brief_workflow (
   FOREIGN KEY (artist_id) REFERENCES users(id) ON DELETE SET NULL,
   CHECK (status IN ('submitted', 'accepted', 'in_progress', 'review', 'completed'))
 ) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS admin_accounts (
+ id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+ email VARCHAR(254) NOT NULL UNIQUE,
+ display_name VARCHAR(100) NOT NULL,
+ password_hash VARCHAR(255) NOT NULL,
+ totp_secret TEXT NOT NULL,
+ recovery_hashes TEXT NOT NULL,
+ last_step BIGINT NOT NULL DEFAULT -1,
+ active INTEGER NOT NULL DEFAULT 1,
+ session_version INTEGER NOT NULL DEFAULT 0,
+ created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+CREATE TABLE IF NOT EXISTS admin_security_lock (id INTEGER PRIMARY KEY) ENGINE=InnoDB;
+INSERT IGNORE INTO admin_security_lock (id) VALUES (1);
+CREATE TABLE IF NOT EXISTS admin_audit (
+ id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+ actor_id BIGINT NULL,
+ actor_email VARCHAR(254) NOT NULL,
+ action VARCHAR(60) NOT NULL,
+ target_type VARCHAR(30) NOT NULL,
+ target_id VARCHAR(80) NOT NULL,
+ before_json TEXT NOT NULL,
+ after_json TEXT NOT NULL,
+ reason VARCHAR(500) NOT NULL,
+ created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+CREATE TABLE IF NOT EXISTS admin_invites (
+ token_hash CHAR(64) PRIMARY KEY,
+ email VARCHAR(254) NOT NULL,
+ display_name VARCHAR(100) NOT NULL,
+ expires_at BIGINT NOT NULL,
+ created_by BIGINT NOT NULL
+) ENGINE=InnoDB;
+CREATE TABLE IF NOT EXISTS account_controls (
+ user_id BIGINT UNSIGNED PRIMARY KEY,
+ suspended INTEGER NOT NULL DEFAULT 0,
+ session_version INTEGER NOT NULL DEFAULT 0,
+ FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+ token_hash CHAR(64) PRIMARY KEY,
+ user_id BIGINT UNSIGNED NOT NULL,
+ expires_at BIGINT NOT NULL,
+ FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB;

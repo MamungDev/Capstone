@@ -1,180 +1,135 @@
 <?php
 declare(strict_types=1);
-require_once __DIR__ . '/../auth/admin.php';
-header('Cache-Control: private, no-store');
-header('X-Content-Type-Options: nosniff');
-header('X-Frame-Options: DENY');
-header("Content-Security-Policy: frame-ancestors 'none'; form-action 'self'; base-uri 'self'");
-header('Referrer-Policy: same-origin');
-
-if (!admin_authorized()) {
-    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-        http_response_code(403);
-        header('Content-Type: text/html; charset=utf-8');
-        exit('Your admin session expired. <a href="login.php">Sign in again</a> to manage accounts.');
-    }
-    header('Location: login.php', true, 302);
-    exit;
+require_once __DIR__ . '/../auth/admin-manage.php';
+require_once __DIR__ . '/../auth/brief-references.php';
+$admin = admin_require();
+function html(mixed $v): string { return htmlspecialchars((string) $v, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
+function field(string $name, mixed $value): void { echo '<input type="hidden" name="'.html($name).'" value="'.html($value).'">'; }
+function action_start(string $action, array $values = []): void {
+    echo '<form method="post" class="admin-action">'; field('csrf', csrf_token()); field('action', $action);
+    foreach ($values as $name => $value) field($name, $value);
 }
-
-function html(mixed $value): string
-{
-    return htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+function reason_fields(bool $password = false): void {
+    echo '<label>Reason<textarea name="reason" required minlength="5" maxlength="500" rows="2" placeholder="Explain why this change is needed"></textarea></label>';
+    if ($password) echo '<label>Your admin password<input name="admin_password" type="password" autocomplete="current-password" required maxlength="4096"></label>';
 }
-function text_input(array $values, string $key): string
-{
-    return is_string($values[$key] ?? null) ? trim($values[$key]) : '';
-}
-function admin_url(array $overrides = []): string
-{
-    global $search, $role, $page;
-    return 'index.php?' . http_build_query(array_merge(['q' => $search, 'role' => $role, 'page' => $page], $overrides));
-}
-
-$search = mb_substr(text_input($_GET, 'q'), 0, 254);
-$role = text_input($_GET, 'role');
-if (!in_array($role, ['client', 'artist'], true)) $role = '';
-$page = max(1, (int) text_input($_GET, 'page'));
-$deleteId = max(0, (int) text_input($_GET, 'delete'));
-$message = $_SESSION['admin_message'] ?? '';
-unset($_SESSION['admin_message']);
+$tab = admin_text($_GET, 'tab') ?: 'overview';
+if (!in_array($tab, ['overview','accounts','projects','activity','security'], true)) $tab = 'overview';
+$q = mb_substr(admin_text($_GET, 'q'), 0, 120);
+$page = max(1, min(100000, (int) admin_text($_GET, 'page')));
+$message = $_SESSION['admin_message_v2'] ?? null; unset($_SESSION['admin_message_v2']);
 $error = '';
-
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
-        if (!is_string($_POST['csrf'] ?? null) || !hash_equals(csrf_token(), $_POST['csrf'])) {
-            http_response_code(403);
-            throw new DomainException('Your session expired. Refresh the page and try again.');
-        }
-        $action = text_input($_POST, 'action');
-        if ($action === 'logout') {
-            unset($_SESSION['admin_until'], $_SESSION['admin_proof'], $_SESSION['csrf_token']);
-            session_regenerate_id(true);
-            header('Location: login.php', true, 303);
-            exit;
-        }
-        if ($action !== 'delete') {
-            http_response_code(400);
-            throw new DomainException('Unknown action.');
-        }
-        $deleteId = max(0, (int) text_input($_POST, 'user_id'));
-        admin_delete_user($deleteId, text_input($_POST, 'confirm_email'));
-        $_SESSION['admin_message'] = 'Account and its submitted briefs deleted.';
-        header('Location: ' . admin_url(), true, 303);
-        exit;
-    } catch (DomainException $exception) {
-        $error = $exception->getMessage();
-    } catch (Throwable $exception) {
-        error_log('Admin operation failed: ' . $exception->getMessage());
-        http_response_code(503);
-        $error = 'We could not complete that request. Please try again.';
+        require_csrf($_POST['csrf'] ?? null);
+        if ((int) ($_SERVER['CONTENT_LENGTH'] ?? 0) > 16384) throw new DomainException('Request too large.', 413);
+        $message = admin_manage($_POST);
+        if (!empty($message['logout'])) { header('Location: login.php', true, 303); exit; }
+        $_SESSION['admin_message_v2'] = $message;
+        $redirect = 'index.php?tab=' . $tab;
+        if (isset($_GET['user']) && ($_POST['action'] ?? '') !== 'delete_user') $redirect .= '&user=' . (int) $_GET['user'];
+        if (isset($_GET['project']) && ($_POST['action'] ?? '') !== 'delete_project') $redirect .= '&project=' . rawurlencode(admin_text($_GET,'project'));
+        header('Location: ' . $redirect, true, 303); exit;
+    } catch (Throwable $e) {
+        http_response_code($e instanceof DomainException ? ($e->getCode() ?: 422) : 503);
+        $error = $e instanceof DomainException ? $e->getMessage() : 'The change could not be saved. Please try again.';
+        if (!$e instanceof DomainException) error_log('Admin management: ' . get_class($e));
     }
 }
-
-$rows = [];
-$counts = ['total' => 0, 'clients' => 0, 'artists' => 0];
-$target = null;
-$total = 0;
-$pages = 1;
-    try {
-        $clientCount = db_driver() === 'pgsql' ? "SUM((role = 'client')::int)" : "SUM(role = 'client')";
-        $artistCount = db_driver() === 'pgsql' ? "SUM((role = 'artist')::int)" : "SUM(role = 'artist')";
-        $counts = db()->query('SELECT COUNT(*) AS total, COALESCE(' . $clientCount . ', 0) AS clients, COALESCE(' . $artistCount . ', 0) AS artists FROM users')->fetch();
-        $conditions = [];
-        $params = [];
-        if ($search !== '') {
-            $conditions[] = '(LOCATE(?, display_name) > 0 OR LOCATE(?, email) > 0)';
-            $params = [$search, $search];
+$rows = []; $total = 0; $pages = 1; $user = null; $project = null; $overview = [];
+try {
+    $term = '%' . str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $q) . '%';
+    if ($tab === 'accounts') {
+        $where = " WHERE (u.display_name LIKE ? ESCAPE '!' OR u.email LIKE ? ESCAPE '!')"; $params = [$term, $term];
+        $role = admin_text($_GET, 'role');
+        if (in_array($role, ['client','artist'], true)) { $where .= ' AND u.role = ?'; $params[] = $role; }
+        $from = ' FROM users u LEFT JOIN account_controls c ON c.user_id = u.id';
+        $query = db()->prepare('SELECT COUNT(*)' . $from . $where); $query->execute($params); $total = (int) $query->fetchColumn();
+        $pages = max(1,(int) ceil($total/20)); $page = min($page,$pages);
+        $query = db()->prepare('SELECT u.id, u.email, u.display_name, u.role, u.created_at, COALESCE(c.suspended,0) AS suspended, (SELECT COUNT(*) FROM client_briefs b WHERE b.client_id=u.id) AS briefs' . $from . $where . ' ORDER BY u.id DESC LIMIT 20 OFFSET ' . (($page-1)*20)); $query->execute($params); $rows = $query->fetchAll();
+        if (isset($_GET['user'])) {
+            $query = db()->prepare('SELECT u.id, u.email, u.display_name, u.role, u.bio, u.created_at, COALESCE(c.suspended,0) AS suspended' . $from . ' WHERE u.id = ?'); $query->execute([(int) $_GET['user']]); $user = $query->fetch();
+            if (!$user) throw new DomainException('Account not found.',404);
         }
-        if ($role !== '') { $conditions[] = 'role = ?'; $params[] = $role; }
-        $where = $conditions ? ' WHERE ' . implode(' AND ', $conditions) : '';
-        $query = db()->prepare('SELECT COUNT(*) FROM users' . $where);
-        $query->execute($params);
-        $total = (int) $query->fetchColumn();
-        $pages = max(1, (int) ceil($total / 20));
-        $page = min($page, $pages);
-        $query = db()->prepare('SELECT id, display_name, email, role, created_at, (SELECT COUNT(*) FROM client_briefs WHERE client_id = users.id) AS briefs FROM users' . $where . ' ORDER BY created_at DESC, id DESC LIMIT 20 OFFSET ' . (($page - 1) * 20));
-        $query->execute($params);
-        $rows = $query->fetchAll();
-        if ($deleteId) {
-            $query = db()->prepare('SELECT id, display_name, email, role, (SELECT COUNT(*) FROM client_briefs WHERE client_id = users.id) AS briefs FROM users WHERE id = ?');
-            $query->execute([$deleteId]);
-            $target = $query->fetch() ?: null;
-            if (!$target && !$error) $error = 'This account no longer exists.';
+    } elseif ($tab === 'projects') {
+        $where = " WHERE (b.project_name LIKE ? ESCAPE '!' OR u.display_name LIKE ? ESCAPE '!')"; $params = [$term,$term];
+        $filter = admin_text($_GET, 'status');
+        if (isset(workflow_labels()[$filter])) { $where .= " AND COALESCE(w.status,'submitted') = ?"; $params[] = $filter; }
+        $from = ' FROM client_briefs b JOIN users u ON u.id=b.client_id LEFT JOIN brief_workflow w ON w.brief_id=b.id LEFT JOIN users a ON a.id=w.artist_id';
+        $query = db()->prepare('SELECT COUNT(*)'.$from.$where); $query->execute($params); $total=(int)$query->fetchColumn();
+        $pages=max(1,(int)ceil($total/20)); $page=min($page,$pages);
+        $query=db()->prepare("SELECT b.id,b.project_name,b.created_at,u.display_name AS client_name,a.display_name AS artist_name,COALESCE(w.status,'submitted') AS status".$from.$where.' ORDER BY b.created_at DESC,b.id DESC LIMIT 20 OFFSET '.(($page-1)*20)); $query->execute($params); $rows=$query->fetchAll();
+        if (isset($_GET['project'])) {
+            $query=db()->prepare('SELECT b.id,b.client_id,b.project_name,b.details_json,b.visual_mime,b.created_at,u.display_name AS client_name'.$from.' WHERE b.id=?'); $query->execute([admin_text($_GET,'project')]); $project=$query->fetch();
+            if (!$project) throw new DomainException('Project not found.',404);
+            $state=workflow_read($project['id']); $details=json_decode($project['details_json'],true,512,JSON_THROW_ON_ERROR);
+            $references=brief_reference_list($project,$details);
+            $artists=db()->query("SELECT u.id,u.display_name,u.email FROM users u LEFT JOIN account_controls c ON c.user_id=u.id WHERE u.role='artist' AND COALESCE(c.suspended,0)=0 ORDER BY u.display_name,u.id")->fetchAll();
+            $query=db()->prepare('SELECT u.id,u.display_name FROM brief_artist_access a JOIN users u ON u.id=a.artist_id WHERE a.brief_id=?'); $query->execute([$project['id']]); $access=$query->fetchAll();
+            admin_audit('project_viewed','project',$project['id']);
         }
-    } catch (Throwable $exception) {
-        error_log('Admin listing failed: ' . $exception->getMessage());
-        http_response_code(503);
-        $error = 'Accounts could not be loaded. Please try again.';
+    } elseif ($tab === 'activity') {
+        $where=" WHERE (actor_email LIKE ? ESCAPE '!' OR action LIKE ? ESCAPE '!' OR target_id LIKE ? ESCAPE '!')"; $params=[$term,$term,$term];
+        $query=db()->prepare('SELECT COUNT(*) FROM admin_audit'.$where);$query->execute($params);$total=(int)$query->fetchColumn();
+        $pages=max(1,(int)ceil($total/20));$page=min($page,$pages);
+        $query=db()->prepare('SELECT * FROM admin_audit'.$where.' ORDER BY id DESC LIMIT 20 OFFSET '.(($page-1)*20));$query->execute($params);$rows=$query->fetchAll();
+    } elseif ($tab === 'security') {
+        $rows=db()->query('SELECT id,email,display_name,active FROM admin_accounts ORDER BY id')->fetchAll();
+        $invites=db()->query('SELECT token_hash,email,expires_at FROM admin_invites ORDER BY expires_at DESC')->fetchAll();
+    } else {
+        $overview['accounts']=(int)db()->query('SELECT COUNT(*) FROM users')->fetchColumn();
+        $overview['suspended']=(int)db()->query('SELECT COUNT(*) FROM account_controls WHERE suspended=1')->fetchColumn();
+        $overview['projects']=(int)db()->query('SELECT COUNT(*) FROM client_briefs')->fetchColumn();
+        $stages=db()->query("SELECT COALESCE(w.status,'submitted') AS status,COUNT(*) AS total FROM client_briefs b LEFT JOIN brief_workflow w ON w.brief_id=b.id GROUP BY COALESCE(w.status,'submitted')")->fetchAll();
+        $rows=db()->query('SELECT actor_email,action,target_id,created_at FROM admin_audit ORDER BY id DESC LIMIT 8')->fetchAll();
     }
+} catch(Throwable $e) {
+    http_response_code($e instanceof DomainException ? ($e->getCode() ?: 422) : 503);
+    $error=$e instanceof DomainException?$e->getMessage():'The admin data could not be loaded. Please try again.';
+    if (!$e instanceof DomainException) error_log('Admin listing: '.get_class($e));
+}
 ?>
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-    <?php require_once __DIR__ . '/../auth/loading-screen.php'; loading_screen_head('list'); ?>
-  <meta name="robots" content="noindex, nofollow">
-  <title>Manage accounts — Mamungkun</title>
-  <link rel="icon" href="../assets/mamungkun-icon.svg" type="image/svg+xml">
-  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&amp;family=Playfair+Display:ital,wght@0,600;1,600&amp;display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../Artist/artist.css">
-  <link rel="stylesheet" href="admin.css">
-  <link rel="stylesheet" href="../assets/css/dropdowns.css?v=<?= filemtime(__DIR__ . '/../assets/css/dropdowns.css') ?>">
-  <script src="../assets/js/dropdowns.js?v=<?= filemtime(__DIR__ . '/../assets/js/dropdowns.js') ?>" defer></script>
-</head>
-<body>
-<div class="shell">
-  <nav aria-label="Main navigation">
-    <a class="brand" href="../index.php"><span class="mark" aria-hidden="true">&#10022;</span>Mamungkun</a>
-    <div class="nav"><a href="../index.php">Home</a><span class="role-pill">Admin</span>
-      <form method="post" action="index.php"><input type="hidden" name="csrf" value="<?= html(csrf_token()) ?>"><input type="hidden" name="action" value="logout"><button class="plain" type="submit">Sign out of admin</button></form>
-    </div>
-  </nav>
-  <main class="artist-main">
-    <p class="eyebrow">Your creative community</p>
-    <h1>People behind <em>the spark.</em></h1>
-    <p class="intro">Manage the client and artist accounts in Mamungkun.</p>
-    <?php if ($error): ?><p class="notice error" role="alert"><?= html($error) ?></p><?php endif; ?>
-    <?php if ($message): ?><p class="notice success" role="status"><?= html($message) ?></p><?php endif; ?>
-
-      <section class="stats" aria-label="Account totals">
-        <div class="stat"><span>All accounts</span><strong><?= html($counts['total']) ?></strong><small>Your community, together.</small></div>
-        <div class="stat warm"><span>Clients</span><strong><?= html($counts['clients']) ?></strong><small>Ideas looking for a home.</small></div>
-        <div class="stat mint"><span>Artists</span><strong><?= html($counts['artists']) ?></strong><small>People bringing ideas to life.</small></div>
-      </section>
-      <?php if ($target): ?>
-        <section class="admin-card confirmation" aria-labelledby="delete-title">
-          <p class="eyebrow">Confirm deletion</p><h2 id="delete-title">Delete <?= html($target['display_name']) ?>?</h2>
-          <p>This permanently removes the <strong><?= html($target['role']) ?></strong> account <strong><?= html($target['email']) ?></strong> and its <strong><?= html($target['briefs']) ?> submitted brief(s)</strong>, including attached images and sketches. This cannot be undone.</p>
-          <form method="post" action="<?= html(admin_url()) ?>">
-            <input type="hidden" name="csrf" value="<?= html(csrf_token()) ?>">
-            <input type="hidden" name="action" value="delete">
-            <input type="hidden" name="user_id" value="<?= html($target['id']) ?>">
-            <label for="confirm-email">Type <?= html($target['email']) ?> to confirm</label>
-            <input id="confirm-email" name="confirm_email" type="email" required autocomplete="off" maxlength="254">
-            <div class="actions"><button class="button danger" type="submit">Permanently delete account</button><a class="small-button" href="<?= html(admin_url()) ?>">Cancel</a></div>
-          </form>
-        </section>
-      <?php endif; ?>
-      <section class="inbox" aria-labelledby="accounts-title">
-        <div class="inbox-title"><div><h2 id="accounts-title">Accounts</h2><p><?= $total ?> matching account(s)</p></div><a class="small-button" href="<?= html(admin_url()) ?>">Refresh</a></div>
-        <form class="filters" method="get" action="index.php">
-          <label class="search"><span class="sr-only">Search by name or email</span><input type="search" name="q" placeholder="Search name or email" value="<?= html($search) ?>" maxlength="254"></label>
-          <label class="select-filter">Role <select name="role"><option value="">All roles</option><option value="client" <?= $role === 'client' ? 'selected' : '' ?>>Client</option><option value="artist" <?= $role === 'artist' ? 'selected' : '' ?>>Artist</option></select></label>
-          <button class="button" type="submit">Search</button>
-          <?php if ($search || $role): ?><a href="index.php">Clear filters</a><?php endif; ?>
-        </form>
-        <div class="table-wrap">
-          <table><caption class="sr-only">Registered client and artist accounts</caption><thead><tr><th scope="col">Name</th><th scope="col">Email</th><th scope="col">Role</th><th scope="col">Briefs</th><th scope="col">Joined</th><th scope="col">Action</th></tr></thead>
-          <tbody><?php foreach ($rows as $row): ?><tr>
-            <td><strong><?= html($row['display_name']) ?></strong><small class="account-id">ID <?= html($row['id']) ?></small></td><td class="account-email"><?= html($row['email']) ?></td><td><span class="role-pill"><?= html($row['role']) ?></span></td><td><?= html($row['briefs']) ?></td><td><?= html(substr($row['created_at'], 0, 10)) ?></td><td><a class="delete-link" href="<?= html(admin_url(['delete' => $row['id']])) ?>" aria-label="Delete account for <?= html($row['email']) ?>">Delete</a></td>
-          </tr><?php endforeach; ?>
-          <?php if (!$rows): ?><tr><td colspan="6" class="empty">No accounts found. Try another name, email, or role.</td></tr><?php endif; ?></tbody></table>
-        </div>
-        <nav class="pagination" aria-label="Account pages"><span>Page <?= $page ?> of <?= $pages ?></span><div><?php if ($page > 1): ?><a class="small-button" href="<?= html(admin_url(['page' => $page - 1])) ?>">Previous</a><?php endif; ?> <?php if ($page < $pages): ?><a class="small-button" href="<?= html(admin_url(['page' => $page + 1])) ?>">Next</a><?php endif; ?></div></nav>
-      </section>
-  </main>
-</div>
-</body>
-</html>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Site administration ? Mamungkun</title>
+<link rel="stylesheet" href="../Artist/artist.css"><link rel="stylesheet" href="admin.css"><script src="../assets/js/admin-tools.js" defer></script></head><body><div class="shell">
+<nav aria-label="Admin navigation"><a class="brand" href="../index.php">? Mamungkun</a><div class="nav"><span><?= html($admin['email']) ?></span><?php action_start('logout'); ?><button class="plain">Sign out</button></form></div></nav>
+<main class="artist-main"><p class="eyebrow">Site administration</p><h1>A space to care.</h1>
+<nav class="admin-tabs" aria-label="Admin sections"><?php foreach(['overview'=>'Overview','accounts'=>'Accounts','projects'=>'Projects','activity'=>'Activity','security'=>'Admin access'] as $key=>$label): ?><a href="?tab=<?= html($key) ?>" <?= $tab===$key?'aria-current="page"':'' ?>><?= html($label) ?></a><?php endforeach; ?></nav>
+<?php if($error): ?><p class="error" role="alert"><?= html($error) ?></p><?php endif; ?>
+<?php if($message): ?><section class="admin-card notice" role="status"><p><?= html($message['message']) ?></p><?php if(!empty($message['link'])): ?><a id="private-link" href="<?= html($message['link']) ?>">Open private link</a> <button type="button" data-copy-link="private-link">Copy private link</button><span id="copy-status" aria-live="polite"></span><?php endif; ?></section><?php endif; ?>
+<?php if($tab==='overview'): ?>
+<section class="stats"><?php foreach($overview as $label=>$count): ?><div class="stat"><span><?= html(ucfirst($label)) ?></span><strong><?= $count ?></strong></div><?php endforeach; ?></section>
+<section class="admin-card"><h2>Project stages</h2><div class="admin-stages"><?php foreach($stages??[] as $stage): ?><a href="?tab=projects&amp;status=<?= html($stage['status']) ?>"><?= html(workflow_labels()[$stage['status']]) ?> <strong><?= (int)$stage['total'] ?></strong></a><?php endforeach; ?></div></section>
+<section class="admin-card"><h2>Recent activity</h2><?php foreach($rows as $row): ?><p><?= html($row['created_at'].' ? '.$row['actor_email'].' ? '.$row['action']) ?></p><?php endforeach; ?><a href="?tab=activity">View activity history</a></section>
+<?php elseif($tab==='accounts'): ?>
+<?php if($user): ?><section class="admin-card"><h2><?= html($user['display_name']) ?></h2><p><?= html($user['email'].' ? '.$user['role']) ?> ? <?= $user['suspended']?'Suspended':'Active' ?></p>
+<?php action_start('edit_user',['user_id'=>$user['id']]); ?><label>Display name<input name="name" maxlength="100" value="<?= html($user['display_name']) ?>" required></label><label>Bio<textarea name="bio" maxlength="500"><?= html($user['bio']) ?></textarea></label><?php reason_fields(); ?><button class="button">Save profile</button></form>
+<?php action_start($user['suspended']?'restore':'suspend',['user_id'=>$user['id']]); reason_fields(); ?><button class="button"><?= $user['suspended']?'Restore account':'Suspend account and sign out sessions' ?></button></form>
+<?php action_start('reset_password',['user_id'=>$user['id']]); reason_fields(true); ?><button class="button">Create password reset link</button></form>
+<details class="danger-zone"><summary>Permanently delete account</summary><p>This removes this account and all its submitted briefs and attachments.</p><?php action_start('delete_user',['user_id'=>$user['id']]); ?><label>Type the exact account email<input name="confirmation" required autocomplete="off"></label><?php reason_fields(true); ?><button class="button danger">Permanently delete account</button></form></details></section><?php endif; ?>
+<form class="filters" method="get"><?php field('tab','accounts'); ?><label>Search<input name="q" value="<?= html($q) ?>" placeholder="Name or email"></label><label>Role<select name="role"><option value="">All roles</option><?php foreach(['client','artist'] as $r): ?><option <?= ($role??'')===$r?'selected':'' ?>><?= html($r) ?></option><?php endforeach; ?></select></label><button class="button">Search</button></form>
+<p><?= $total ?> matching account(s)</p><div class="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Briefs</th><th>Manage</th></tr></thead><tbody><?php foreach($rows as $row): ?><tr><td><?= html($row['display_name']) ?></td><td><?= html($row['email']) ?></td><td><?= html($row['role']) ?></td><td><?= $row['suspended']?'Suspended':'Active' ?></td><td><?= (int)$row['briefs'] ?></td><td><a href="?tab=accounts&amp;user=<?= (int)$row['id'] ?>">Manage account</a></td></tr><?php endforeach; ?></tbody></table></div>
+<?php elseif($tab==='projects'): ?>
+<?php if($project): $values=['project_id'=>$project['id'],'version'=>$state['version']]; ?>
+<section class="admin-card"><h2><?= html($project['project_name']) ?></h2><p>Client: <?= html($project['client_name']) ?> ? <?= html(workflow_labels()[$state['status']]) ?> ? Artist: <?= html($state['artist_name']??'Not assigned') ?></p>
+<dl><?php foreach($details as $key=>$value): if(!in_array($key,['projectType','idea','audience','goal','format','style','energy','tags'],true)) continue; ?><dt><?= html(ucfirst($key)) ?></dt><dd><?= html(is_array($value)?implode(', ',$value):$value) ?></dd><?php endforeach; ?></dl>
+<?php action_start('assign',$values); ?><label>Responsible artist<select name="artist_id" required><option value="">Choose active artist</option><?php foreach($artists as $a): ?><option value="<?= (int)$a['id'] ?>"><?= html($a['display_name'].' ? '.$a['email']) ?></option><?php endforeach; ?></select></label><p>Assignment grants viewing access and resets progress to Submitted.</p><?php reason_fields(); ?><button class="button">Assign artist</button></form>
+<?php action_start('status',$values); ?><label>Correct project stage<select name="status"><?php foreach(workflow_labels() as $key=>$label): ?><option value="<?= html($key) ?>" <?= $state['status']===$key?'selected':'' ?>><?= html($label) ?></option><?php endforeach; ?></select></label><?php reason_fields(); ?><button class="button">Update stage</button></form>
+<h3>Artist access</h3><?php foreach($access as $a): action_start('revoke',$values+['artist_id'=>$a['id']]); ?><strong><?= html($a['display_name']) ?></strong><p>Revoking access also replaces the shared code. Revoking the assigned artist resets this project to Submitted.</p><?php reason_fields(); ?><button class="button">Revoke access</button></form><?php endforeach; ?>
+<?php action_start('rotate_code',$values); ?><p>Replace the shared code to prevent new unlocks with the old code. Artists already listed keep their access. The client can copy the new code from their brief.</p><?php reason_fields(); ?><button class="button">Replace project code</button></form>
+<h3>References</h3><?php foreach($references as $reference): ?><div class="admin-reference"><a target="_blank" rel="noopener" href="brief-image.php?id=<?= html($project['id']) ?>&amp;reference=<?= html($reference['id']) ?>"><?= html($reference['name']) ?> ? view reference</a><?php action_start('delete_reference',$values+['reference_id'=>$reference['id']]); reason_fields(); ?><button class="button danger">Remove reference permanently</button></form></div><?php endforeach; ?>
+<details class="danger-zone"><summary>Permanently delete project</summary><?php action_start('delete_project',$values); ?><label>Type the project name exactly<input name="confirmation" required></label><?php reason_fields(true); ?><button class="button danger">Delete project and references</button></form></details></section>
+<?php endif; ?>
+<form method="get" class="filters"><?php field('tab','projects'); ?><label>Search<input name="q" value="<?= html($q) ?>" placeholder="Project or client"></label><label>Stage<select name="status"><option value="">All stages</option><?php foreach(workflow_labels() as $key=>$label): ?><option value="<?= html($key) ?>" <?= ($filter??'')===$key?'selected':'' ?>><?= html($label) ?></option><?php endforeach; ?></select></label><button class="button">Search</button></form>
+<p><?= $total ?> matching project(s)</p><div class="table-wrap"><table><thead><tr><th>Project</th><th>Client</th><th>Artist</th><th>Stage</th><th>Manage</th></tr></thead><tbody><?php foreach($rows as $row): ?><tr><td><?= html($row['project_name']) ?></td><td><?= html($row['client_name']) ?></td><td><?= html($row['artist_name']??'Not assigned') ?></td><td><?= html(workflow_labels()[$row['status']]) ?></td><td><a href="?tab=projects&amp;project=<?= html($row['id']) ?>">Review project</a></td></tr><?php endforeach; ?></tbody></table></div>
+<?php elseif($tab==='activity'): ?>
+<p>Administrative actions and private project views are recorded here. Times use the database timezone.</p><form method="get" class="filters"><?php field('tab','activity'); ?><label>Search<input name="q" value="<?= html($q) ?>" placeholder="Admin email, action, or record ID"></label><button class="button">Search</button></form>
+<?php foreach($rows as $row): ?><article class="admin-card"><strong><?= html($row['action']) ?></strong><p><?= html($row['actor_email'].' ? '.$row['created_at'].' ? '.$row['target_type'].' '.$row['target_id']) ?></p><p><?= html($row['reason']) ?></p><details><summary>Previous and new values</summary><pre>Before: <?= html($row['before_json']) ?>
+After: <?= html($row['after_json']) ?></pre></details></article><?php endforeach; ?>
+<?php elseif($tab==='security'): ?>
+<section class="admin-card"><h2>Administrators</h2><p>Each administrator has full management access and must use an authenticator. Your own account cannot be disabled here.</p><?php foreach($rows as $row): ?><p><strong><?= html($row['display_name']) ?></strong> <?= html($row['email']) ?> ? <?= $row['active']?'Active':'Disabled' ?></p><?php if((int)$row['id']!==(int)$admin['id']): action_start($row['active']?'disable_admin':'enable_admin',['admin_id'=>$row['id']]); reason_fields(true); ?><button class="button"><?= $row['active']?'Disable administrator':'Enable administrator' ?></button></form><?php endif; endforeach; ?></section>
+<section class="admin-card"><h2>Invite administrator</h2><?php action_start('invite_admin'); ?><label>Name<input name="name" required maxlength="100"></label><label>Email<input name="email" type="email" required maxlength="254"></label><?php reason_fields(true); ?><button class="button">Create private invitation</button></form></section>
+<section class="admin-card"><h2>Pending invitations</h2><?php foreach($invites??[] as $invite): ?><p><?= html($invite['email']) ?> ? <?= (int)$invite['expires_at']>time()?'Pending':'Expired' ?></p><?php action_start('revoke_invite',['invite_id'=>$invite['token_hash']]); reason_fields(); ?><button class="button">Revoke invitation</button></form><?php endforeach; ?></section>
+<section class="admin-card"><h2>Change your admin password</h2><?php action_start('change_password'); ?><label>New password<input name="new_password" type="password" required minlength="12" maxlength="4096" autocomplete="new-password"></label><label>Confirm new password<input name="confirmation" type="password" required minlength="12" maxlength="4096" autocomplete="new-password"></label><?php reason_fields(true); ?><button class="button">Change password and sign out all sessions</button></form><p>Keep your recovery codes safe. If you lose both your authenticator and recovery codes, the server owner must recover your account.</p></section>
+<?php endif; ?>
+<?php if(in_array($tab,['accounts','projects','activity'],true)): ?><nav class="pagination" aria-label="Result pages"><span>Page <?= $page ?> of <?= $pages ?></span><div><?php if($page>1): ?><a href="?<?= html(http_build_query(['tab'=>$tab,'q'=>$q,'role'=>$role??'','status'=>$filter??'','page'=>$page-1])) ?>">Previous</a><?php endif; ?> <?php if($page<$pages): ?><a href="?<?= html(http_build_query(['tab'=>$tab,'q'=>$q,'role'=>$role??'','status'=>$filter??'','page'=>$page+1])) ?>">Next</a><?php endif; ?></div></nav><?php endif; ?>
+</main></div></body></html>

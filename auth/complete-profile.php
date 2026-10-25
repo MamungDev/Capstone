@@ -82,6 +82,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&amp;family=Manrope:wght@400;600;700;800&amp;family=Playfair+Display:wght@600&amp;display=swap" rel="stylesheet">
   <link rel="stylesheet" href="../assets/css/complete-profile.css?v=<?= filemtime(__DIR__ . '/../assets/css/complete-profile.css') ?>">
+  <link rel="stylesheet" href="../assets/css/password-toggle.css?v=<?= filemtime(__DIR__ . '/../assets/css/password-toggle.css') ?>">
+  <script src="../assets/js/password-toggle.js?v=<?= filemtime(__DIR__ . '/../assets/js/password-toggle.js') ?>" defer></script>
 </head>
 <body>
   <main class="profile-card">

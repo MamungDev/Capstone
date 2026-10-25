@@ -23,6 +23,8 @@
     const signin = mode === 'signin';
     password.value = '';
     confirm.value = '';
+    password.dispatchEvent(new Event('input'));
+    confirm.dispatchEvent(new Event('input'));
     confirm.setCustomValidity('');
     status.hidden = true;
     status.textContent = '';
@@ -160,6 +162,7 @@
   const params = new URLSearchParams(location.search);
   if (params.get('auth') === 'client' || params.get('auth') === 'artist') {
     const notices = {
+      'account-unavailable': 'This account is unavailable. Contact the site administrator.',
       'google-not-configured': 'Google sign-in is not available yet. Please use your email and password.',
       'google-expired': 'Google sign-in expired. Please try again.',
       'google-cancelled': 'Google sign-in was cancelled.',
