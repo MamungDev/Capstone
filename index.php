@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__ . '/auth/admin.php';
+require_once __DIR__ . '/auth/google.php';
+$googleEnabled = google_configured(app_config());
 $signedInUser = current_user();
 $adminStatus = admin_password_status();
 $adminError = $_SESSION['admin_login_error'] ?? '';
@@ -19,12 +21,12 @@ unset($_SESSION['admin_login_error']);
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&amp;family=Manrope:wght@400;600;700;800&amp;family=Playfair+Display:ital,wght@0,600;0,700;1,600&amp;display=swap" rel="stylesheet">
     <link rel="stylesheet" href="assets/css/landing.css">
-    <link rel="stylesheet" href="assets/css/auth.css">
+    <link rel="stylesheet" href="assets/css/auth.css?v=<?= filemtime(__DIR__ . '/assets/css/auth.css') ?>">
     <script>window.MAMUNGKUN_AUTH = <?= json_encode([
         'csrf' => csrf_token(),
         'user' => $signedInUser,
     ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_INVALID_UTF8_SUBSTITUTE) ?>;</script>
-    <script src="assets/js/landing.js" defer></script>
+    <script src="assets/js/landing.js?v=<?= filemtime(__DIR__ . '/assets/js/landing.js') ?>" defer></script>
     <script src="assets/js/admin-modal.js" defer></script>
   </head>
   <body id="home">
@@ -146,6 +148,17 @@ unset($_SESSION['admin_login_error']);
         </div>
         <div class="auth-methods" hidden>
           <button class="auth-back" type="button">← Choose Artist or Client</button>
+          <?php if ($googleEnabled): ?>
+          <a class="auth-google" href="auth/google-start.php?role=client" hidden>
+            <svg width="20" height="20" viewBox="0 0 48 48" aria-hidden="true" focusable="false">
+              <path fill="#4285F4" d="M43.61 24.46c0-1.36-.12-2.66-.35-3.92H24v7.42h11a9.4 9.4 0 0 1-4.08 6.16v5.12h6.6c3.86-3.55 6.09-8.78 6.09-14.78z"/>
+              <path fill="#34A853" d="M24 44c5.51 0 10.13-1.83 13.51-4.95l-6.6-5.12c-1.83 1.23-4.17 1.98-6.91 1.98-5.31 0-9.82-3.58-11.43-8.4H5.76v5.28A20 20 0 0 0 24 44z"/>
+              <path fill="#FBBC05" d="M12.57 27.51a12 12 0 0 1 0-7.02v-5.28H5.76a20 20 0 0 0 0 17.58l6.81-5.28z"/>
+              <path fill="#EA4335" d="M24 12.09c3 0 5.68 1.03 7.8 3.05l5.85-5.85C34.1 5.98 29.51 4 24 4A20 20 0 0 0 5.76 15.21l6.81 5.28c1.61-4.82 6.12-8.4 11.43-8.4z"/>
+            </svg>
+            <span>Continue with Google</span>
+          </a>
+          <?php endif; ?>
           <form id="authEmailForm" class="auth-email-form" method="dialog">
             <div id="authNameField" class="auth-field" hidden>
               <label for="authName">Your name</label>

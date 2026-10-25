@@ -19,13 +19,48 @@ To demonstrate the complete flow:
 3. Open the brief from the artist inbox and review the client's answers and reference. Use **Download reference** to save the attachment.
 4. Sign back in as the client and open **My briefs** to view the same submission.
 
-Client accounts cannot open the artist inbox or its reference endpoints. Clients can only view their own submissions through **My briefs**. Artist assignment, messaging, editable studio notes, and status tracking are not implemented yet. Google sign-in is still deferred.
+Client accounts cannot open the artist inbox or its reference endpoints. Clients can only view their own submissions through **My briefs**. Artist assignment, messaging, editable studio notes, and status tracking are not implemented yet. Google sign-in is available after the setup below.
 
 To run the client and artist regression checks with Apache and MySQL running, use `node tests/brief-submission.cjs` from the project folder. It creates temporary accounts and briefs, checks persistence, access isolation, validation, images, sketches, retry handling, artist sign-in/sign-out, inbox search/filter/sort/pagination, and reference downloads, then deletes its test records. Existing accounts and briefs are preserved. The artist checks are in `tests/artist-workspace.cjs` and run as part of this command. These are HTTP/database checks; visual layout should also be reviewed in a browser at desktop and mobile widths.
 
 The local database connection is configured in `auth/config.local.php`. That file is ignored by Git and denied direct HTTP access. If your XAMPP MySQL root password changes, update `db_password` there. Do not put the database credentials in `index.php` or JavaScript.
 
-Google sign-in is deferred until launch and is hidden from the demo modal. Password recovery is also not configured yet. A public launch should add email verification, password recovery, rate limiting, HTTPS, and a restricted MySQL user.
+Google sign-in appears in the client and artist sign-in and registration screens when its credentials and callback URL are configured. Password recovery and verification emails for password accounts are not configured yet.
+
+## Google sign-in
+
+Google verifies identity through the PHP OAuth callback. Application accounts remain in the existing `users` table in Supabase PostgreSQL (or local MySQL). This flow does not use Supabase Auth, and does not need a Google provider configured in the Supabase dashboard. It requests only `openid email profile`, with no access to Gmail messages.
+
+1. Open [Google Cloud Console](https://console.cloud.google.com/) and create/select a project such as **Mamungkun**.
+2. Open **Google Auth Platform → Get started**. Enter **Mamungkun** as the app name, your support/contact email, and choose **External** for the audience. If using Testing, add your intended Gmail accounts under **Audience → Test users**.
+3. Open **Clients → Create client**, choose **Web application**, and name it **Mamungkun website**. Under **Authorized redirect URIs**, add this exact URL:
+
+   ```text
+   https://capstone-smoky-theta.vercel.app/auth/google-callback.php
+   ```
+
+   This is a server redirect flow; Authorized JavaScript origins are not required by this implementation. Use the stable production domain for sign-in, rather than individual deployment URLs.
+4. Save the client ID and client secret privately. Add these **Production** variables in Vercel:
+
+   | Variable | Value |
+   | --- | --- |
+   | `GOOGLE_CLIENT_ID` | Client ID from Google, ending in `.apps.googleusercontent.com` |
+   | `GOOGLE_CLIENT_SECRET` | Client secret from Google; mark Sensitive |
+   | `GOOGLE_REDIRECT_URI` | `https://capstone-smoky-theta.vercel.app/auth/google-callback.php` |
+
+5. Push the code changes and deploy with those variables. Open the production homepage, choose **Client** or **Artist**, then **Continue with Google**. Google accounts that are new to this app are created in the chosen role. Existing Google accounts must sign in with their original role. The app does not grant admin access through Google.
+
+Accounts already registered with a password must continue using their password. Matching emails are never automatically linked; linking an existing password account would require a separate authenticated flow. For the first Google login, use a Google account that has not already been registered with a password in this app.
+
+The callback uses one-time session state, a nonce, PKCE, and signed Google ID token verification. Preview URLs redirect to the configured callback hostname before starting Google login so the callback receives the correct session cookie. Configure a separate Google client and callback for a separate testing deployment rather than mixing production and testing accounts.
+
+For local development, use a separate Google web client with `http://localhost/Capstone/auth/google-callback.php` and set `google_client_id`, `google_client_secret`, and `google_redirect_uri` in the ignored `auth/config.local.php`. Keep credentials out of Git and chat.
+
+Run `C:\xampp\php\php.exe tests/google-auth.php` for signed-token validation and isolated account/role checks (SQLite in memory), and `node tests/google-flow.cjs` for HTTP redirect, state, cancellation, and PKCE checks with dummy credentials. These do not contact Google or write to the app database. A real Google account login still needs to be checked after configuring the OAuth client.
+
+Troubleshooting: `redirect_uri_mismatch` means the Google client's registered URI and `GOOGLE_REDIRECT_URI` must match exactly. An expired login can mean the flow started on another hostname or the session expired. If the Google button is missing, check all three Vercel variables and redeploy. Google auth changes do not send verification or password-recovery emails for password accounts.
+
+References: [Google web server OAuth flow](https://developers.google.com/identity/protocols/oauth2/web-server), [OpenID Connect](https://developers.google.com/identity/openid-connect/openid-connect).
 
 ## Account manager
 

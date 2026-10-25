@@ -1,4 +1,24 @@
 /* Auth modal appearance from the original Mamungkun prototype. */
+.auth-google {
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:12px;
+  min-height:44px;
+  box-sizing:border-box;
+  padding:10px 12px;
+  margin-bottom:22px;
+  border:1px solid #747775;
+  border-radius:4px;
+  background:#fff;
+  color:#1f1f1f;
+  font:500 14px Arial,sans-serif;
+  text-decoration:none;
+}
+.auth-google:hover { background:#f8faff; }
+.auth-google:focus-visible { outline:3px solid #3158c9; outline-offset:4px; }
+.auth-google svg { flex-shrink:0; }
+
 body.auth-open {
   overflow:hidden
 }

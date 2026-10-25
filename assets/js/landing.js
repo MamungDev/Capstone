@@ -9,6 +9,7 @@
   const password = find('#authPassword');
   const confirm = find('#authConfirm');
   const status = find('.auth-status');
+  const google = find('.auth-google');
   let selectedRole = null;
   let mode = 'choose';
   let returnFocus;
@@ -25,6 +26,10 @@
     status.textContent = '';
     find('.auth-roles').hidden = !choosing;
     find('.auth-methods').hidden = choosing;
+    if (google) {
+      google.hidden = !(signin || signup);
+      google.href = 'auth/google-start.php?role=' + encodeURIComponent(selectedRole || 'client');
+    }
 
     for (const [field, input, shown] of [
       ['#authNameField', name, signup],
@@ -54,8 +59,8 @@
       : selectedRole === 'artist' ? 'Your next<br>creative chapter.' : 'Give your idea<br>a place to begin.';
     find('#auth-description').textContent = choosing ? 'How would you like to join Mamungkun?'
       : mode === 'forgot' ? 'Enter your account email and we’ll send a password reset link.'
-      : signup ? 'Start with your name, email, and a password.'
-      : `Sign in to your ${selectedRole} workspace with your email and password.`;
+      : signup ? (google ? 'Continue with Google or create an account with your email.' : 'Start with your name, email, and a password.')
+      : `Sign in to your ${selectedRole} workspace${google ? ' with Google or your email and password.' : ' with your email and password.'}`;
     find('.auth-note').textContent = selectedRole === 'artist' && mode !== 'forgot'
       ? 'A space for artists and the ideas they bring to life.'
       : 'A space for your ideas and the people who bring them to life.';
@@ -152,12 +157,13 @@
   const params = new URLSearchParams(location.search);
   if (params.get('auth') === 'client' || params.get('auth') === 'artist') {
     const notices = {
-      'google-not-configured': 'Google sign-in needs an OAuth client ID and secret first.',
+      'google-not-configured': 'Google sign-in is not available yet. Please use your email and password.',
       'google-expired': 'Google sign-in expired. Please try again.',
       'google-cancelled': 'Google sign-in was cancelled.',
       'google-failed': 'Google sign-in could not finish. Please try again.',
       'client-only': 'That Google account belongs to another role.',
-      'email-exists': 'An account already uses that email. Please sign in with its password.',
+      'role-mismatch': 'That Google account uses another workspace. Go back and choose its original account type.',
+      'email-exists': 'An account already uses that email. Please use its original sign-in method.',
     };
     selectedRole = params.get('auth');
     setMode('signin');
