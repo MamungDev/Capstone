@@ -21,14 +21,14 @@ unset($_SESSION['admin_login_error']);
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&amp;family=Manrope:wght@400;600;700;800&amp;family=Playfair+Display:ital,wght@0,600;0,700;1,600&amp;display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="assets/css/landing.css">
+    <link rel="stylesheet" href="assets/css/landing.css?v=<?= filemtime(__DIR__ . '/assets/css/landing.css') ?>">
     <link rel="stylesheet" href="assets/css/auth.css?v=<?= filemtime(__DIR__ . '/assets/css/auth.css') ?>">
     <script>window.MAMUNGKUN_AUTH = <?= json_encode([
         'csrf' => csrf_token(),
         'user' => $signedInUser,
     ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_INVALID_UTF8_SUBSTITUTE) ?>;</script>
     <script src="assets/js/landing.js?v=<?= filemtime(__DIR__ . '/assets/js/landing.js') ?>" defer></script>
-    <script src="assets/js/admin-modal.js" defer></script>
+    <script src="assets/js/admin-modal.js?v=<?= filemtime(__DIR__ . '/assets/js/admin-modal.js') ?>" defer></script>
     <script src="assets/js/hero-stack.js?v=<?= filemtime(__DIR__ . '/assets/js/hero-stack.js') ?>" defer></script>
     <link rel="stylesheet" href="assets/css/password-toggle.css?v=<?= filemtime(__DIR__ . '/assets/css/password-toggle.css') ?>">
     <script src="assets/js/password-toggle.js?v=<?= filemtime(__DIR__ . '/assets/js/password-toggle.js') ?>" defer></script>
