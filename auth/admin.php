@@ -10,6 +10,22 @@ function admin_password_status(): string {
 function admin_secret(): string {
     return admin_password_status() === 'ready' ? (string) app_config()['admin_password'] : '';
 }
+function admin_allowed_emails(): array {
+    $configured = app_config()['admin_allowed_emails'] ?? [];
+    if (is_string($configured)) $configured = preg_split('/[,;\s]+/', $configured, -1, PREG_SPLIT_NO_EMPTY);
+    if (!is_array($configured)) return [];
+    $allowed = [];
+    foreach ($configured as $email) {
+        if (!is_string($email)) continue;
+        $email = mb_strtolower(trim($email));
+        if (filter_var($email, FILTER_VALIDATE_EMAIL) && preg_match('/^[^@]+@gmail\.com$/D', $email)) $allowed[] = $email;
+    }
+    return array_values(array_unique($allowed));
+}
+function admin_email_allowed(string $email): bool {
+    $email = mb_strtolower(trim($email));
+    return preg_match('/^[^@]+@gmail\.com$/D', $email) === 1 && in_array($email, admin_allowed_emails(), true);
+}
 function admin_audit(string $action, string $type, string $id, array $before = [], array $after = [], string $reason = '', ?array $actor = null): void {
     $actor ??= admin_current();
     db()->prepare('INSERT INTO admin_audit (actor_id, actor_email, action, target_type, target_id, before_json, after_json, reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')->execute([
@@ -23,7 +39,7 @@ function admin_current(): ?array {
     $query = db()->prepare('SELECT * FROM admin_accounts WHERE id = ? AND active = 1');
     $query->execute([$_SESSION['admin_id']]);
     $admin = $query->fetch();
-    if (!$admin) return null;
+    if (!$admin || !admin_email_allowed((string) $admin['email'])) return null;
     $proof = hash_hmac('sha256', session_id() . ':' . $_SESSION['admin_until'] . ':' . $admin['session_version'], $admin['password_hash']);
     return hash_equals($proof, (string) ($_SESSION['admin_proof'] ?? '')) ? $admin : null;
 }
@@ -72,7 +88,7 @@ function admin_signin(string $email, string $password, string $code): string {
     $pdo = db(); $pdo->beginTransaction();
     try {
         $q = $pdo->prepare('SELECT * FROM admin_accounts WHERE email = ? FOR UPDATE'); $q->execute([$email]); $admin = $q->fetch();
-        $valid = $admin && (int) $admin['active'] === 1 && strlen($password) <= 4096 && password_verify($password, $admin['password_hash']);
+        $valid = $admin && (int) $admin['active'] === 1 && admin_email_allowed($email) && strlen($password) <= 4096 && password_verify($password, $admin['password_hash']);
         $step = null; $recovery = null;
         if ($valid) {
             $hashes = json_decode($admin['recovery_hashes'], true, 512, JSON_THROW_ON_ERROR);

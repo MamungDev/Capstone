@@ -111,12 +111,13 @@ function app_config(): array
             'db_ssl_ca_pem' => 'DB_SSL_CA_PEM',
             'admin_password' => 'ADMIN_PASSWORD',
             'admin_mfa_key' => 'ADMIN_MFA_KEY',
+            'admin_allowed_emails' => 'ADMIN_ALLOWED_EMAILS',
             'google_client_id' => 'GOOGLE_CLIENT_ID',
             'google_client_secret' => 'GOOGLE_CLIENT_SECRET',
             'google_redirect_uri' => 'GOOGLE_REDIRECT_URI',
         ] as $key => $environmentVariable) {
             $value = getenv($environmentVariable);
-            if ($value !== false && $value !== '') $config[$key] = $value;
+            if ($value !== false && $value !== '') $config[$key] = $key === 'admin_allowed_emails' ? preg_split('/[,;\s]+/', $value, -1, PREG_SPLIT_NO_EMPTY) : $value;
         }
         if (getenv('VERCEL') !== false) {
             foreach (['DB_DRIVER', 'DB_HOST', 'DB_NAME', 'DB_USER', 'DB_PASSWORD'] as $name) {

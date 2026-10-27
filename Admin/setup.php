@@ -31,6 +31,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $email = $invite['email']; $name = $invite['display_name'];
             }
             if (!filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($email) > 254 || $name === '' || mb_strlen($name) > 100) throw new DomainException('Enter a name and valid email.', 422);
+            if (!admin_email_allowed($email)) throw new DomainException('This Gmail address is not on the site administrator allowlist.', 403);
             if (!is_string($password) || strlen($password) < 12 || strlen($password) > 4096 || $password !== ($_POST['confirmation'] ?? null)) throw new DomainException('Use at least 12 characters and matching passwords.', 422);
             admin_cipher_key();
             $_SESSION['admin_enrollment'] = ['email' => $email, 'name' => $name, 'hash' => password_hash($password, PASSWORD_DEFAULT), 'secret' => admin_totp_secret(), 'first' => $first, 'invite' => hash('sha256', $inviteToken), 'expires' => time() + 600];
@@ -70,7 +71,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $pending = $_SESSION['admin_enrollment'] ?? null;
 if (is_array($pending) && $pending['expires'] < time()) { unset($_SESSION['admin_enrollment']); $pending = null; }
 ?>
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Admin setup — Mamungkun</title><link rel="stylesheet" href="../assets/css/complete-profile.css"></head><body><main class="profile-card">
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Admin setup — Mamungkun</title><link rel="stylesheet" href="../assets/css/complete-profile.css"><link rel="stylesheet" href="../assets/css/password-toggle.css"><script src="../assets/js/password-toggle.js" defer></script><link rel="stylesheet" href="../assets/css/dropdowns.css"><script src="../assets/js/dropdowns.js" defer></script></head><body><main class="profile-card">
 <h1>Admin setup</h1>
 <?php if ($error): ?><p class="error" role="alert"><?= setup_html($error) ?></p><?php endif; ?>
 <?php if ($codes): ?>
@@ -81,8 +82,10 @@ if (is_array($pending) && $pending['expires'] < time()) { unset($_SESSION['admin
 <form method="post"><input type="hidden" name="csrf" value="<?= setup_html(csrf_token()) ?>"><input type="hidden" name="action" value="finish"><label for="code">Authenticator code</label><input id="code" name="code" inputmode="numeric" pattern="[0-9]{6}" autocomplete="one-time-code" required><button>Verify and create admin</button></form>
 <?php elseif ($first || $inviteToken !== ''): ?>
 <p><?= $first ? 'Create the first named administrator using the site setup key.' : 'Create your password, then connect your authenticator.' ?></p>
+<?php if (!admin_allowed_emails()): ?><p class="error">Administrator setup is closed until the site owner adds allowed Gmail addresses to ADMIN_ALLOWED_EMAILS.</p><?php else: ?>
 <form method="post"><input type="hidden" name="csrf" value="<?= setup_html(csrf_token()) ?>"><input type="hidden" name="action" value="start">
-<?php if ($first): ?><label for="setup-key">Site setup key</label><input id="setup-key" name="setup_key" type="password" required autocomplete="off"><label for="name">Name</label><input id="name" name="name" required maxlength="100"><label for="email">Email</label><input id="email" name="email" type="email" required maxlength="254"><?php endif; ?>
+<?php if ($first): ?><label for="setup-key">Site setup key</label><input id="setup-key" name="setup_key" type="password" required autocomplete="off"><label for="name">Name</label><input id="name" name="name" required maxlength="100"><label for="email">Allowed Gmail address</label><select id="email" name="email" required><option value="">Choose an approved account</option><?php foreach (admin_allowed_emails() as $allowedEmail): ?><option value="<?= setup_html($allowedEmail) ?>"><?= setup_html($allowedEmail) ?></option><?php endforeach; ?></select><?php endif; ?>
 <label for="password">Admin password</label><input id="password" name="password" type="password" required minlength="12" maxlength="4096" autocomplete="new-password"><label for="confirmation">Confirm password</label><input id="confirmation" name="confirmation" type="password" required minlength="12" maxlength="4096" autocomplete="new-password"><p>Use at least 12 characters.</p><button>Set up authenticator</button></form>
-<?php else: ?><p>Admin setup is closed. Ask an existing administrator for an invitation.</p><?php endif; ?>
+<?php endif; ?>
+<?php else: ?><p>Admin setup is closed. Ask an existing administrator for an invitation. The invitation only works for an allowlisted Gmail account.</p><?php endif; ?>
 <p><a href="../index.php?auth=admin">Back to sign-in</a></p></main></body></html>

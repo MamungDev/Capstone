@@ -29,6 +29,7 @@ unset($_SESSION['admin_login_error']);
     ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_INVALID_UTF8_SUBSTITUTE) ?>;</script>
     <script src="assets/js/landing.js?v=<?= filemtime(__DIR__ . '/assets/js/landing.js') ?>" defer></script>
     <script src="assets/js/admin-modal.js" defer></script>
+    <script src="assets/js/hero-stack.js?v=<?= filemtime(__DIR__ . '/assets/js/hero-stack.js') ?>" defer></script>
     <link rel="stylesheet" href="assets/css/password-toggle.css?v=<?= filemtime(__DIR__ . '/assets/css/password-toggle.css') ?>">
     <script src="assets/js/password-toggle.js?v=<?= filemtime(__DIR__ . '/assets/js/password-toggle.js') ?>" defer></script>
   </head>
@@ -54,42 +55,56 @@ unset($_SESSION['admin_login_error']);
             </div>
             <p class="home-caption">Sign in to shape your idea. Your draft stays in this browser.</p>
           </div>
-          <div class="brief-stage" aria-label="Example creative brief">
+          <div class="brief-stage" aria-label="Example creative briefs" data-brief-stack>
             <div class="example-tag">
               A spark, made concrete
             </div>
-            <article class="example-brief">
+            <?php $heroBriefs = [
+              ['theme'=>'jazz', 'title'=>['Midnight','Sessions.'], 'description'=>'A poster series for a small, late-night jazz room.', 'audience'=>'Curious night owls & music lovers', 'feeling'=>'Warm. Intimate. A little unexpected.', 'palette'=>'Navy, coral, yellow and mint', 'format'=>'Poster / 4:5', 'style'=>'Hand-crafted'],
+              ['theme'=>'clay', 'title'=>['Sunday','Studio.'], 'description'=>'A welcoming brand for a neighborhood pottery studio.', 'audience'=>'First-time makers & creative neighbors', 'feeling'=>'Earthy. Playful. Made by hand.', 'palette'=>'Terracotta, peach, cream and brown', 'format'=>'Brand identity', 'style'=>'Soft & organic'],
+              ['theme'=>'field', 'title'=>['Field','Notes.'], 'description'=>'An illustrated journal for little outdoor discoveries.', 'audience'=>'Weekend wanderers & nature lovers', 'feeling'=>'Fresh. Curious. Quietly adventurous.', 'palette'=>'Forest green, sage, yellow and pale blue', 'format'=>'Editorial / A5', 'style'=>'Nature-inspired'],
+            ]; ?>
+            <div class="example-stack">
+            <?php foreach ($heroBriefs as $briefIndex => $heroBrief): $heroEscape = static fn(string $value): string => htmlspecialchars($value, ENT_QUOTES, 'UTF-8'); ?>
+            <article class="example-brief example-brief--<?= $heroEscape($heroBrief['theme']) ?>" data-stack-position="<?= $briefIndex ?>" data-brief-title="<?= $heroEscape(implode(' ', $heroBrief['title'])) ?>" <?= $briefIndex ? 'aria-hidden="true" inert' : '' ?>>
               <div class="example-top">
                 <span>CREATIVE BRIEF / EXAMPLE</span>
-                <span>01</span>
+                <span><?= sprintf('%02d', $briefIndex + 1) ?></span>
               </div>
-              <h2>Midnight<br>Sessions.</h2>
-              <p>A poster series for a small,<br>late-night jazz room.</p>
+              <h2><?= $heroEscape($heroBrief['title'][0]) ?><br><?= $heroEscape($heroBrief['title'][1]) ?></h2>
+              <p><?= $heroEscape($heroBrief['description']) ?></p>
               <div class="example-rule">
               </div>
               <dl>
                 <div>
                   <dt>The audience</dt>
-                  <dd>Curious night owls &amp; music lovers</dd>
+                  <dd><?= $heroEscape($heroBrief['audience']) ?></dd>
                 </div>
                 <div>
                   <dt>The feeling</dt>
-                  <dd>Warm. Intimate. A little unexpected.</dd>
+                  <dd><?= $heroEscape($heroBrief['feeling']) ?></dd>
                 </div>
               </dl>
-              <div class="example-colours" aria-label="Navy, coral, yellow and mint palette">
+              <div class="example-colours" role="img" aria-label="<?= $heroEscape($heroBrief['palette']) ?> palette">
                 <i></i><i></i><i></i><i></i>
               </div>
               <div class="example-bottom">
-                <span>Poster · 4:5</span>
-                <span>Hand-crafted</span>
+                <span><?= $heroEscape($heroBrief['format']) ?></span>
+                <span><?= $heroEscape($heroBrief['style']) ?></span>
               </div>
             </article>
+            <?php endforeach; ?>
+            </div>
             <div class="example-note">
               <span aria-hidden="true">&#10022;</span>
               <div>
                 It doesn't have to be perfect.<br>It just has to begin.
               </div>
+            </div>
+            <div class="example-stack-controls" hidden>
+              <button type="button" data-stack-previous aria-label="Previous example brief">&larr;</button>
+              <span class="example-stack-status" role="status" aria-live="polite" aria-atomic="true">1 / 3 <span class="stack-sr-only">Midnight Sessions.</span></span>
+              <button type="button" data-stack-next aria-label="Next example brief">&rarr;</button>
             </div>
           </div>
         </section>
@@ -133,7 +148,10 @@ unset($_SESSION['admin_login_error']);
       <footer class="home-footer">
         <a class="home-brand" href="#home">Mamungkun</a>
         <p>A space for the first draft.</p>
-        <a href="#auth-modal" data-auth-open aria-haspopup="dialog" aria-controls="auth-modal">Open workspace</a>
+        <nav class="home-footer-links" aria-label="Footer navigation">
+          <a href="privacy.php">Privacy &amp; Cookies</a>
+          <a href="#auth-modal" data-auth-open aria-haspopup="dialog" aria-controls="auth-modal">Open workspace</a>
+        </nav>
       </footer>
     </div>
     <dialog id="auth-modal" class="auth-modal" aria-labelledby="auth-title" aria-describedby="auth-description">

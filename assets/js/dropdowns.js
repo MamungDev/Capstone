@@ -13,6 +13,7 @@
     trigger.setAttribute('role', 'combobox');
     trigger.setAttribute('aria-haspopup', 'listbox');
     trigger.setAttribute('aria-expanded', 'false');
+    if (select.required) trigger.setAttribute('aria-required', 'true');
     const label = Array.from(select.labels || []).map(item => Array.from(item.childNodes)
       .filter(node => node.nodeType === Node.TEXT_NODE).map(node => node.textContent).join('').trim()).join(' ');
     trigger.setAttribute('aria-label', select.getAttribute('aria-label') || label || 'Choose an option');
@@ -34,6 +35,7 @@
     function sync() {
       trigger.textContent = select.selectedOptions[0]?.textContent || 'Choose an option';
       trigger.disabled = select.disabled;
+      if (select.validity.valid) trigger.removeAttribute('aria-invalid');
     }
     function highlight(index) {
       active = index;
@@ -121,6 +123,12 @@
       }
     });
     select.addEventListener('change', sync);
+    select.addEventListener('invalid', event => {
+      event.preventDefault();
+      trigger.setAttribute('aria-invalid', 'true');
+      trigger.focus();
+      open();
+    });
     select.form?.addEventListener('reset', () => setTimeout(sync, 0));
     controls.set(select, { sync });
     sync();

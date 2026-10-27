@@ -1,5 +1,10 @@
 (() => {
-  document.querySelectorAll('input[type="password"]').forEach(input => {
+  document.querySelectorAll('input[type="password"]').forEach((input, index) => {
+    if (!input.id) {
+      let id = `password-field-${index}`;
+      while (document.getElementById(id)) id += '-toggle';
+      input.id = id;
+    }
     const wrapper = document.createElement('div');
     wrapper.className = 'password-control';
     input.before(wrapper);

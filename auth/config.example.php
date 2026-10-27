@@ -9,6 +9,8 @@ return [
     'db_user' => 'root',
     'db_password' => '',
     'admin_password' => '', // Local only; use ADMIN_PASSWORD in Vercel (16+ characters).
+    'admin_allowed_emails' => [], // Lowercase Gmail addresses allowed to enroll as administrators.
+    'admin_mfa_key' => '', // Optional stable secret used to encrypt admin authenticator keys.
     'google_client_id' => '',
     'google_client_secret' => '',
     'google_redirect_uri' => 'http://localhost/Capstone/auth/google-callback.php',

@@ -1,0 +1,45 @@
+.privacy-skip { position: absolute; top: -100px; left: 16px; padding: 12px 20px; background: #1d2b4d; color: white; border-radius: 8px; z-index: 2; }
+.privacy-skip:focus { top: 12px; }
+.privacy-heading { padding: 64px 0 42px; max-width: 800px; }
+#landing .privacy-heading h1 { font-size: clamp(40px, 5.7vw, 68px); }
+.privacy-intro { max-width: 620px; color: #65738d; font-size: 17px; line-height: 1.8; }
+.privacy-updated { color: #65738d; font: 11px/1.8 'DM Mono', monospace; margin-top: 24px; }
+.privacy-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 42px; align-items: start; padding-bottom: 64px; }
+#landing .privacy-contents { display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 4px; position: sticky; top: 24px; }
+.privacy-contents p { margin: 0 0 14px; font: 11px 'DM Mono', monospace; text-transform: uppercase; letter-spacing: .08em; color: #65738d; }
+#landing .privacy-contents a { padding: 10px 12px; border-radius: 8px; color: #52637f; font-size: 13px; line-height: 1.5; }
+#landing .privacy-contents a:hover { color: #3158c9; background: #e9eef9; }
+.privacy-card { min-width: 0; padding: 8px 40px; border: 1px solid #dce3ef; border-radius: 24px; background: white; }
+.privacy-card section { padding: 30px 0; scroll-margin-top: 24px; }
+.privacy-card section + section { border-top: 1px solid #e5eaf3; }
+.privacy-section-number { color: #9d4938 !important; font: 10px 'DM Mono', monospace; text-transform: uppercase; letter-spacing: .08em; }
+.privacy-card h2 { color: #1d2b4d; font: 600 27px/1.25 'Playfair Display', Georgia, serif; letter-spacing: -.035em; margin: 14px 0 18px; }
+.privacy-card p, .privacy-card li { color: #52637f; font-size: 14px; line-height: 1.9; }
+.privacy-card strong { color: #1d2b4d; }
+.privacy-card ul { padding-left: 22px; }
+.privacy-card li + li { margin-top: 10px; }
+#landing .privacy-card a { color: #3158c9; text-decoration: underline; text-underline-offset: 3px; }
+.privacy-table-wrap { overflow-x: auto; margin: 24px 0; border: 1px solid #dce3ef; border-radius: 12px; }
+.privacy-table-wrap:focus-visible { outline: 2px solid #3158c9; outline-offset: 4px; }
+.privacy-card table { border-collapse: collapse; width: 100%; text-align: left; font-size: 12px; line-height: 1.7; }
+.privacy-card caption { text-align: left; padding: 14px 16px; font-weight: 700; background: #f7f9fd; }
+.privacy-card th, .privacy-card td { padding: 16px; border-top: 1px solid #e5eaf3; vertical-align: top; min-width: 145px; }
+.privacy-card thead { background: #f7f9fd; }
+.privacy-card tbody th { font-weight: 600; }
+.privacy-card td { color: #52637f; }
+.privacy-card code { font: 10px/1.8 'DM Mono', monospace; overflow-wrap: anywhere; }
+.privacy-note { padding: 18px 20px; border: 1px solid #e0e6f3; border-radius: 12px; background: #f1f5fd; }
+@media (max-width: 900px) {
+  .privacy-layout { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+  #landing .privacy-contents { position: static; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .privacy-contents p { grid-column: 1 / -1; margin-bottom: 8px; }
+}
+@media (max-width: 600px) {
+  .privacy-heading { padding: 40px 0 28px; }
+  .privacy-intro { font-size: 15px; }
+  .privacy-card { padding: 0 20px; border-radius: 18px; }
+  .privacy-card h2 { font-size: 25px; }
+  #landing .privacy-contents a { padding: 8px; font-size: 12px; }
+  #landing .home-nav { gap: 16px; flex-wrap: wrap; }
+}
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }

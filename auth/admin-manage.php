@@ -100,6 +100,7 @@ function admin_manage(array $input): array
             $pdo->query('SELECT id FROM admin_security_lock WHERE id = 1 FOR UPDATE');
             $email = mb_strtolower(admin_text($input, 'email')); $name = admin_text($input, 'name');
             if (!filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($email) > 254 || $name === '' || mb_strlen($name) > 100) throw new DomainException('Enter a valid admin name and email.', 422);
+            if (!admin_email_allowed($email)) throw new DomainException('Only Gmail addresses on the administrator allowlist can be invited.', 403);
             $q = $pdo->prepare('SELECT 1 FROM admin_accounts WHERE email = ?'); $q->execute([$email]);
             if ($q->fetchColumn()) throw new DomainException('That admin already exists.', 409);
             $pdo->prepare('DELETE FROM admin_invites WHERE email = ?')->execute([$email]);

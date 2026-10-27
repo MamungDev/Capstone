@@ -136,8 +136,9 @@ nav { display: flex; align-items: center; justify-content: space-between; }
 #landing .brief-stage {
   background:#e6edfb;
   border-radius:32px;
-  padding:42px 35px 55px;
-  position:relative
+  padding:42px 35px 22px;
+  position:relative;
+  isolation:isolate
 }
 
 #landing .example-tag {
@@ -145,7 +146,7 @@ nav { display: flex; align-items: center; justify-content: space-between; }
   font-size:12px;
   text-transform:uppercase;
   letter-spacing:.08em;
-  margin-bottom:24px;
+  margin-bottom:36px;
   text-align:center;
   color:#546783
 }
@@ -155,9 +156,36 @@ nav { display: flex; align-items: center; justify-content: space-between; }
   border:1px solid #ced8e9;
   border-radius:4px;
   padding:28px;
-  transform:rotate(-3deg);
-  box-shadow:0 18px 30px #21375d18
+  box-shadow:0 18px 30px #21375d18;
+  grid-area:1 / 1;
+  min-width:0;
+  position:relative;
+  transform-origin:center 80%
 }
+
+#landing .example-stack { display:grid; margin:0 10px 54px; container-type:inline-size; }
+#landing .example-stack .example-brief h2 { font-size:clamp(28px, 12cqi, 48px); }
+#landing .example-brief[data-stack-position="0"] { z-index:3; transform:rotate(-3deg); }
+#landing .example-brief[data-stack-position="1"] { z-index:2; transform:translate(9px, 5px) rotate(3deg); }
+#landing .example-brief[data-stack-position="2"] { z-index:1; transform:translate(-7px, 0) rotate(-7deg); }
+#landing .example-brief[aria-hidden="true"] { pointer-events:none; }
+#landing .example-brief--clay { background:#fff9f0; border-color:#e6d6c4; }
+#landing .example-brief--field { background:#f1f8f2; border-color:#cadfd0; }
+#landing .example-brief--clay .example-colours i:nth-child(1) { background:#aa583f; }
+#landing .example-brief--clay .example-colours i:nth-child(2) { background:#edb59a; }
+#landing .example-brief--clay .example-colours i:nth-child(3) { background:#eeddb8; }
+#landing .example-brief--clay .example-colours i:nth-child(4) { background:#634d42; }
+#landing .example-brief--field .example-colours i:nth-child(1) { background:#2f5546; }
+#landing .example-brief--field .example-colours i:nth-child(2) { background:#9cbaa2; }
+#landing .example-brief--field .example-colours i:nth-child(3) { background:#ecd078; }
+#landing .example-brief--field .example-colours i:nth-child(4) { background:#b6d6e7; }
+#landing .example-stack-controls { display:flex; justify-content:center; align-items:center; gap:20px; position:relative; z-index:5; }
+#landing .example-stack-controls[hidden] { display:none; }
+#landing .example-stack-controls button { display:grid; place-items:center; width:42px; height:42px; padding:0; border:1px solid #c4d0e6; border-radius:50%; background:#f7f9ff; color:#1d2b4d; font-size:21px; cursor:pointer; }
+#landing .example-stack-controls button:hover { background:#1d2b4d; color:#fff; border-color:#1d2b4d; }
+#landing .example-stack-controls button:focus-visible { outline:3px solid #3158c9; outline-offset:4px; }
+#landing .example-stack-status { min-width:44px; color:#52637f; text-align:center; font:12px 'DM Mono',monospace; }
+#landing .stack-sr-only { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
 
 #landing .example-top {
   display:flex;
@@ -231,6 +259,8 @@ nav { display: flex; align-items: center; justify-content: space-between; }
 
 #landing .example-bottom {
   display:flex;
+  flex-wrap:wrap;
+  gap:8px 16px;
   justify-content:space-between;
   font-size:11px;
   color:#677791
@@ -241,7 +271,7 @@ nav { display: flex; align-items: center; justify-content: space-between; }
   align-items:center;
   gap:12px;
   position:absolute;
-  bottom:12px;
+  bottom:88px;
   right:0;
   background:#ffd166;
   border-radius:8px;
@@ -249,11 +279,39 @@ nav { display: flex; align-items: center; justify-content: space-between; }
   font-size:12px;
   line-height:1.5;
   transform:rotate(3deg);
-  box-shadow:0 6px 10px #21375d10
+  box-shadow:0 6px 10px #21375d10;
+  z-index:4;
+  pointer-events:none
 }
 
 #landing .example-note>span {
   font-size:30px
+}
+
+/* The stationary stage keeps the hover target steady as its cards lift. */
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  #landing .example-brief,
+  #landing .example-note {
+    transition:transform 380ms cubic-bezier(.2,.75,.25,1), box-shadow 380ms ease;
+  }
+
+  #landing .brief-stage:hover .example-brief[data-stack-position="0"] {
+    transform:translateY(-12px) rotate(-2deg);
+    box-shadow:0 28px 42px #21375d26;
+  }
+
+  #landing .brief-stage:hover .example-brief[data-stack-position="1"] {
+    transform:translate(12px, -3px) rotate(5deg);
+  }
+
+  #landing .brief-stage:hover .example-brief[data-stack-position="2"] {
+    transform:translate(-10px, -5px) rotate(-9deg);
+  }
+
+  #landing .brief-stage:hover .example-note {
+    transform:translateY(-8px) rotate(2deg);
+    box-shadow:0 14px 22px #21375d20;
+  }
 }
 
 #landing .home-process {
@@ -353,6 +411,19 @@ nav { display: flex; align-items: center; justify-content: space-between; }
   margin:0
 }
 
+#landing .home-footer-links {
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:flex-start;
+  gap:12px 24px
+}
+
+#landing .home-footer-links a:hover {
+  color:#3158c9;
+  text-decoration:underline;
+  text-underline-offset:4px
+}
+
 @media(max-width:850px) {
 #landing .home-hero {
   gap:30px;
@@ -360,7 +431,7 @@ nav { display: flex; align-items: center; justify-content: space-between; }
 }
 
 #landing .brief-stage {
-  padding:30px 20px 50px
+  padding:30px 24px 20px
 }
 
 #landing .example-brief {
