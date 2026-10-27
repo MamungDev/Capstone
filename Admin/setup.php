@@ -71,7 +71,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $pending = $_SESSION['admin_enrollment'] ?? null;
 if (is_array($pending) && $pending['expires'] < time()) { unset($_SESSION['admin_enrollment']); $pending = null; }
 ?>
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Admin setup — Mamungkun</title><link rel="stylesheet" href="../assets/css/complete-profile.css"><link rel="stylesheet" href="../assets/css/password-toggle.css"><script src="../assets/js/password-toggle.js" defer></script><link rel="stylesheet" href="../assets/css/dropdowns.css"><script src="../assets/js/dropdowns.js" defer></script></head><body><main class="profile-card">
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Admin setup — Mamungkun</title>
+<link rel="stylesheet" href="../assets/css/admin-loading.css?v=<?= filemtime(__DIR__.'/../assets/css/admin-loading.css') ?>">
+<script src="../assets/js/admin-loading.js?v=<?= filemtime(__DIR__.'/../assets/js/admin-loading.js') ?>" data-layout="setup"></script>
+<link rel="stylesheet" href="../assets/css/complete-profile.css"><link rel="stylesheet" href="../assets/css/password-toggle.css"><script src="../assets/js/password-toggle.js" defer></script><link rel="stylesheet" href="../assets/css/dropdowns.css"><script src="../assets/js/dropdowns.js" defer></script></head><body><main class="profile-card">
 <h1>Admin setup</h1>
 <?php if ($error): ?><p class="error" role="alert"><?= setup_html($error) ?></p><?php endif; ?>
 <?php if ($codes): ?>

@@ -70,15 +70,9 @@ References: [Google web server OAuth flow](https://developers.google.com/identit
 
 Choose Admin on the homepage to open the sign-in modal. `/Admin/login.php` redirects signed-out visitors to that modal. Successful sign-in opens `/Admin/index.php` to manage the accounts in the database used by that deployment. Signed-out visitors to the account manager are redirected to sign-in. The manager lists names, emails, roles, registration dates, and submitted brief counts, with search, role filters, and pagination. App client and artist passwords do not grant admin access.
 
-To enable the live account manager:
+Administrator access is separate from client and artist accounts and uses a named admin account, password, and authenticator code. Follow [ADMIN_SETUP.md](ADMIN_SETUP.md) for the current setup and recovery instructions. In particular, `ADMIN_PASSWORD` is the private first-setup/recovery key; it is **not** the password entered at the normal admin sign-in screen. The normal sign-in password is created during admin enrollment, and the authenticator must be enrolled against the same deployment and database that you sign into.
 
-1. Open **Vercel → Capstone → Settings → Environment Variables**.
-2. Add `ADMIN_PASSWORD` with a unique password or passphrase of at least 16 characters. Mark it Sensitive and select the deployment environment you want to manage.
-3. Redeploy, then open `https://capstone-smoky-theta.vercel.app/Admin/login.php` and enter that password. No admin email or Google account is required. If the password is missing or shorter than 16 characters, the sign-in page displays the specific setup issue and keeps sign-in disabled until you update the value and redeploy.
-
-Keep the password in Vercel, not in GitHub or chat. Admin access is disabled when the password is missing or shorter than 16 characters. For XAMPP only, add an `admin_password` entry to the ignored `auth/config.local.php` and visit `http://localhost/Capstone/Admin/index.php`; that instance manages your local database, not Aiven.
-
-Admin sign-in expires after at most one hour. Changing `ADMIN_PASSWORD` and redeploying invalidates existing admin sessions. Ten failed admin sign-in attempts lock admin sign-in for the remainder of a 15-minute window; the limit is shared across sessions. The `admin_login_limits` table is created automatically when needed.
+For Vercel, configure `ADMIN_PASSWORD`, `ADMIN_ALLOWED_EMAILS`, `ADMIN_MFA_KEY`, and the hosted database variables in the intended deployment environment, then redeploy. `ADMIN_MFA_KEY` must remain stable after enrollment. Local `auth/config.local.php` and the XAMPP database are separate from Vercel and do not create or transfer a production administrator. Ten failed admin sign-in attempts lock that email's sign-in for 15 minutes.
 
 Select **Delete** to review an account and its brief count, then type its exact email to confirm. Confirming permanently deletes that account and all its submitted briefs, including attached images and sketches. Other accounts are preserved. A deleted account loses access on its next request. The manager does not show password hashes or support account editing or password resets yet.
 
