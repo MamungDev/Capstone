@@ -51,7 +51,7 @@ header('Referrer-Policy: strict-origin-when-cross-origin');
           <h2>The information you share.</h2>
           <p>Mamungkun stores your email address, display name, account role (client or artist), and account dates so you can sign in and use the right workspace. If you add a biography or profile photo, those are stored with your account too.</p>
           <p>Passwords are stored as hashes. If you use Google sign-in, we also store the Google account identifier used to recognize your account.</p>
-          <p>Administrator accounts have additional security records, including an encrypted authenticator key, hashed recovery codes, and sign-in attempt records. Administrative actions are logged with the administrator, affected record, time, and relevant changes or reasons.</p>
+          <p>Administrator accounts use Google sign-in. We store their approved email address, Google account identifier, name, account status, and session security records. Administrative actions are logged with the administrator, affected record, time, and relevant changes or reasons.</p>
         </section>
         <section id="projects">
           <p class="privacy-section-number">02 / Your work</p>
@@ -105,7 +105,7 @@ header('Referrer-Policy: strict-origin-when-cross-origin');
           <p class="privacy-section-number">07 / Get in touch</p>
           <h2>Questions about your information?</h2>
           <p>Contact <strong>Mamungkun Support</strong> at <a href="mailto:inqurery@gmail.com">inqurery@gmail.com</a> for website inquiries, questions about stored information, or requests to remove your account or briefs.</p>
-          <p>The site does not currently offer a self-service account deletion form. Please describe your request in your email and do not include passwords, authenticator codes, or recovery codes.</p>
+          <p>The site does not currently offer a self-service account deletion form. Please describe your request in your email and do not include passwords or sign-in codes.</p>
         </section>
       </article>
     </div>

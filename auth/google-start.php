@@ -10,7 +10,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
 }
 
 $role = $_GET['role'] ?? null;
-if (!in_array($role, ['client', 'artist'], true)) {
+if (!in_array($role, ['client', 'artist', 'admin'], true)) {
     header('Location: ../index.php', true, 302);
     exit;
 }

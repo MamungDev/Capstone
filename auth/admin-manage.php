@@ -11,9 +11,6 @@ function admin_manage(array $input): array
     $action = admin_text($input, 'action');
     if ($action === 'logout') { admin_audit('logout', 'admin', (string) $admin['id']); admin_logout(); return ['message' => 'Signed out.', 'logout' => true]; }
     $reason = admin_reason($input['reason'] ?? null);
-    if (in_array($action, ['delete_user', 'delete_project', 'invite_admin', 'disable_admin', 'enable_admin', 'reset_password', 'change_password'], true)) {
-        admin_reauthenticate($admin, is_string($input['admin_password'] ?? null) ? $input['admin_password'] : '');
-    }
     if ($action === 'delete_user') {
         admin_delete_user((int) admin_text($input, 'user_id'), admin_text($input, 'confirmation'), $reason);
         return ['message' => 'Account and its submitted briefs deleted.'];
@@ -96,18 +93,6 @@ function admin_manage(array $input): array
                 $pdo->prepare($sql)->execute([$id, $new['artist_id'], $new['status'], $version + 1]);
                 admin_audit('project_' . $action, 'project', $id, ['artist_id' => $state['artist_id'], 'status' => $state['status'], 'version' => $version], $new + ['version' => $version + 1], $reason);
             }
-        } elseif ($action === 'invite_admin') {
-            $pdo->query('SELECT id FROM admin_security_lock WHERE id = 1 FOR UPDATE');
-            $email = mb_strtolower(admin_text($input, 'email')); $name = admin_text($input, 'name');
-            if (!filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($email) > 254 || $name === '' || mb_strlen($name) > 100) throw new DomainException('Enter a valid admin name and email.', 422);
-            if (!admin_email_allowed($email)) throw new DomainException('Only Gmail addresses on the administrator allowlist can be invited.', 403);
-            $q = $pdo->prepare('SELECT 1 FROM admin_accounts WHERE email = ?'); $q->execute([$email]);
-            if ($q->fetchColumn()) throw new DomainException('That admin already exists.', 409);
-            $pdo->prepare('DELETE FROM admin_invites WHERE email = ?')->execute([$email]);
-            $token = bin2hex(random_bytes(32));
-            $pdo->prepare('INSERT INTO admin_invites VALUES (?, ?, ?, ?, ?)')->execute([hash('sha256', $token), $email, $name, time() + 86400, $admin['id']]);
-            admin_audit('admin_invited', 'admin', $email, [], ['email' => $email], $reason);
-            $result = ['message' => 'Invitation created. Copy the link and share privately with the invited administrator. It expires in 24 hours. No email has been sent.', 'link' => 'setup.php?invite=' . $token];
         } elseif (in_array($action, ['disable_admin', 'enable_admin'], true)) {
             $pdo->query('SELECT id FROM admin_security_lock WHERE id = 1 FOR UPDATE');
             $id = (int) admin_text($input, 'admin_id');
@@ -116,19 +101,7 @@ function admin_manage(array $input): array
             if (!$other) throw new DomainException('Administrator not found.', 404);
             $active = $action === 'enable_admin' ? 1 : 0;
             $pdo->prepare('UPDATE admin_accounts SET active = ?, session_version = session_version + 1 WHERE id = ?')->execute([$active, $id]);
-            if (!$active) $pdo->prepare('DELETE FROM admin_invites WHERE created_by = ?')->execute([$id]);
             admin_audit($action, 'admin', (string) $id, $other, ['active' => $active], $reason);
-        } elseif ($action === 'revoke_invite') {
-            $token = admin_text($input, 'invite_id');
-            $q = $pdo->prepare('SELECT email FROM admin_invites WHERE token_hash = ?'); $q->execute([$token]); $email = $q->fetchColumn();
-            $pdo->prepare('DELETE FROM admin_invites WHERE token_hash = ?')->execute([$token]);
-            admin_audit('invitation_revoked', 'admin', (string) $email, [], [], $reason);
-        } elseif ($action === 'change_password') {
-            $password = $input['new_password'] ?? null;
-            if (!is_string($password) || strlen($password) < 12 || strlen($password) > 4096 || $password !== ($input['confirmation'] ?? null)) throw new DomainException('Use at least 12 characters and matching passwords.', 422);
-            $pdo->prepare('UPDATE admin_accounts SET password_hash = ?, session_version = session_version + 1 WHERE id = ?')->execute([password_hash($password, PASSWORD_DEFAULT), $admin['id']]);
-            admin_audit('admin_password_changed', 'admin', (string) $admin['id'], [], [], $reason, $admin);
-            $result = ['message' => 'Password changed. Sign in again.', 'logout' => true];
         } else throw new DomainException('Unknown admin action.', 422);
         $pdo->commit();
         if (!empty($result['logout'])) admin_logout();

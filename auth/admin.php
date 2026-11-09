@@ -1,15 +1,6 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__ . '/bootstrap.php';
-require_once __DIR__ . '/admin-mfa.php';
-
-function admin_password_status(): string {
-    $secret = (string) (app_config()['admin_password'] ?? '');
-    return $secret === '' ? 'missing' : (strlen($secret) < 16 ? 'short' : 'ready');
-}
-function admin_secret(): string {
-    return admin_password_status() === 'ready' ? (string) app_config()['admin_password'] : '';
-}
 function admin_allowed_emails(): array {
     $configured = app_config()['admin_allowed_emails'] ?? [];
     if (is_string($configured)) $configured = preg_split('/[,;\s]+/', $configured, -1, PREG_SPLIT_NO_EMPTY);
@@ -18,13 +9,33 @@ function admin_allowed_emails(): array {
     foreach ($configured as $email) {
         if (!is_string($email)) continue;
         $email = mb_strtolower(trim($email));
-        if (filter_var($email, FILTER_VALIDATE_EMAIL) && preg_match('/^[^@]+@gmail\.com$/D', $email)) $allowed[] = $email;
+        if (strlen($email) <= 254 && filter_var($email, FILTER_VALIDATE_EMAIL)) $allowed[] = $email;
     }
     return array_values(array_unique($allowed));
 }
 function admin_email_allowed(string $email): bool {
     $email = mb_strtolower(trim($email));
-    return preg_match('/^[^@]+@gmail\.com$/D', $email) === 1 && in_array($email, admin_allowed_emails(), true);
+    return in_array($email, admin_allowed_emails(), true);
+}
+// Upgrade existing installations without changing admin IDs, status, or audit history.
+function ensure_admin_google_schema(): void {
+    static $checked = false;
+    if ($checked) return;
+    ensure_database_schema();
+    $schema = db_driver() === 'pgsql' ? 'current_schema()' : 'DATABASE()';
+    $columns = db()->query("SELECT column_name FROM information_schema.columns WHERE table_schema = $schema AND table_name = 'admin_accounts'")->fetchAll(PDO::FETCH_COLUMN);
+    foreach (['google_sub' => 'VARCHAR(255) NULL UNIQUE', 'session_key' => "VARCHAR(64) NOT NULL DEFAULT ''"] as $column => $definition) {
+        if (in_array($column, $columns, true)) continue;
+        try { db()->exec("ALTER TABLE admin_accounts ADD COLUMN $column $definition"); }
+        catch (PDOException $e) { if (!in_array($e->getCode(), ['42701', '42S21'], true)) throw $e; }
+    }
+    // Retired credentials have no sign-in or recovery path in the Google-only flow.
+    foreach (['password_hash', 'totp_secret', 'recovery_hashes', 'last_step'] as $column) {
+        if (!in_array($column, $columns, true)) continue;
+        try { db()->exec("ALTER TABLE admin_accounts DROP COLUMN $column"); }
+        catch (PDOException $e) { if ($e->getCode() !== '42703' && ($e->errorInfo[1] ?? null) !== 1091) throw $e; }
+    }
+    $checked = true;
 }
 function admin_audit(string $action, string $type, string $id, array $before = [], array $after = [], string $reason = '', ?array $actor = null): void {
     $actor ??= admin_current();
@@ -34,13 +45,13 @@ function admin_audit(string $action, string $type, string $id, array $before = [
     ]);
 }
 function admin_current(): ?array {
-    if (!is_int($_SESSION['admin_id'] ?? null) || (int) ($_SESSION['admin_until'] ?? 0) <= time()) return null;
-    ensure_database_schema();
+    if (($_SESSION['admin_auth_method'] ?? '') !== 'google' || !is_int($_SESSION['admin_id'] ?? null) || (int) ($_SESSION['admin_until'] ?? 0) <= time()) return null;
+    ensure_admin_google_schema();
     $query = db()->prepare('SELECT * FROM admin_accounts WHERE id = ? AND active = 1');
     $query->execute([$_SESSION['admin_id']]);
     $admin = $query->fetch();
-    if (!$admin || !admin_email_allowed((string) $admin['email'])) return null;
-    $proof = hash_hmac('sha256', session_id() . ':' . $_SESSION['admin_until'] . ':' . $admin['session_version'], $admin['password_hash']);
+    if (!$admin || !admin_email_allowed((string) $admin['email']) || !$admin['google_sub'] || $admin['google_sub'] !== ($_SESSION['admin_google_sub'] ?? null) || $admin['session_key'] === '') return null;
+    $proof = hash_hmac('sha256', session_id() . ':' . $_SESSION['admin_until'] . ':' . $admin['session_version'], $admin['session_key']);
     return hash_equals($proof, (string) ($_SESSION['admin_proof'] ?? '')) ? $admin : null;
 }
 function admin_authorized(): bool { return admin_current() !== null; }
@@ -61,59 +72,48 @@ function admin_start_session(array $admin): void {
     session_regenerate_id(true);
     $_SESSION['admin_id'] = (int) $admin['id'];
     $_SESSION['admin_until'] = time() + 3600;
-    $_SESSION['admin_proof'] = hash_hmac('sha256', session_id() . ':' . $_SESSION['admin_until'] . ':' . $admin['session_version'], $admin['password_hash']);
+    $_SESSION['admin_auth_method'] = 'google';
+    $_SESSION['admin_google_sub'] = $admin['google_sub'];
+    $_SESSION['admin_proof'] = hash_hmac('sha256', session_id() . ':' . $_SESSION['admin_until'] . ':' . $admin['session_version'], $admin['session_key']);
     unset($_SESSION['csrf_token'], $_SESSION['admin_enrollment']);
 }
 function admin_logout(): void {
-    unset($_SESSION['admin_id'], $_SESSION['admin_until'], $_SESSION['admin_proof'], $_SESSION['csrf_token'], $_SESSION['admin_enrollment']);
+    unset($_SESSION['admin_id'], $_SESSION['admin_until'], $_SESSION['admin_proof'], $_SESSION['admin_auth_method'], $_SESSION['admin_google_sub'], $_SESSION['csrf_token'], $_SESSION['admin_enrollment']);
     session_regenerate_id(true);
 }
-function admin_attempt(string $scope): bool {
-    ensure_database_schema();
-    $bucket = hash('sha256', 'admin-v2:' . $scope);
-    $now = time();
-    $sql = db_driver() === 'pgsql'
-        ? 'INSERT INTO admin_login_limits (bucket, attempts, window_end) VALUES (?, 1, ?) ON CONFLICT (bucket) DO UPDATE SET attempts = CASE WHEN admin_login_limits.window_end <= ? THEN 1 ELSE admin_login_limits.attempts + 1 END, window_end = CASE WHEN admin_login_limits.window_end <= ? THEN EXCLUDED.window_end ELSE admin_login_limits.window_end END'
-        : 'INSERT INTO admin_login_limits (bucket, attempts, window_end) VALUES (?, 1, ?) ON DUPLICATE KEY UPDATE attempts = IF(window_end <= ?, 1, attempts + 1), window_end = IF(window_end <= ?, VALUES(window_end), window_end)';
-    db()->prepare($sql)->execute([$bucket, $now + 900, $now, $now]);
-    $q = db()->prepare('SELECT attempts FROM admin_login_limits WHERE bucket = ?'); $q->execute([$bucket]);
-    return (int) $q->fetchColumn() <= 10;
-}
-function admin_clear_attempts(string $scope): void {
-    db()->prepare('DELETE FROM admin_login_limits WHERE bucket = ?')->execute([hash('sha256', 'admin-v2:' . $scope)]);
-}
-function admin_signin(string $email, string $password, string $code): string {
-    $email = mb_strtolower(trim($email));
-    if (!admin_attempt('login:' . $email)) return 'limited';
+// Call only after Google's ID token signature, audience, nonce, and claims are verified.
+function admin_google_signin(array $identity): void {
+    $email = mb_strtolower(trim((string) ($identity['email'] ?? '')));
+    $subject = $identity['sub'] ?? null;
+    if (!admin_email_allowed($email) || !in_array($identity['email_verified'] ?? null, [true, 'true'], true) ||
+        !is_string($subject) || $subject === '' || strlen($subject) > 255) throw new DomainException('admin-not-allowed');
+    ensure_admin_google_schema();
     $pdo = db(); $pdo->beginTransaction();
     try {
-        $q = $pdo->prepare('SELECT * FROM admin_accounts WHERE email = ? FOR UPDATE'); $q->execute([$email]); $admin = $q->fetch();
-        $valid = $admin && (int) $admin['active'] === 1 && admin_email_allowed($email) && strlen($password) <= 4096 && password_verify($password, $admin['password_hash']);
-        $step = null; $recovery = null;
-        if ($valid) {
-            $hashes = json_decode($admin['recovery_hashes'], true, 512, JSON_THROW_ON_ERROR);
-            $index = array_search(hash('sha256', strtoupper(trim($code))), $hashes, true);
-            if ($index !== false) { unset($hashes[$index]); $recovery = array_values($hashes); }
-            else $step = admin_totp_step(admin_decrypt($admin['totp_secret']), trim($code), (int) $admin['last_step']);
-            $valid = $step !== null || $recovery !== null;
+        // Serialize provisioning so simultaneous callbacks cannot create duplicate admins.
+        $pdo->query('SELECT id FROM admin_security_lock WHERE id = 1 FOR UPDATE');
+        $q = $pdo->prepare('SELECT * FROM admin_accounts WHERE email = ? FOR UPDATE');
+        $q->execute([$email]); $admin = $q->fetch();
+        if ($admin && ((int) $admin['active'] !== 1 || ($admin['google_sub'] !== null && $admin['google_sub'] !== $subject))) {
+            throw new DomainException('admin-not-allowed');
         }
-        if (!$valid) {
-            admin_audit('login_failed', 'admin', '', [], [], '', ['email' => mb_substr($email, 0, 254)]);
-            $pdo->commit(); return 'invalid';
+        $q = $pdo->prepare('SELECT id FROM admin_accounts WHERE google_sub = ?');
+        $q->execute([$subject]); $linked = $q->fetchColumn();
+        if ($linked !== false && (!$admin || (int) $linked !== (int) $admin['id'])) throw new DomainException('admin-not-allowed');
+        if (!$admin) {
+            $name = is_string($identity['name'] ?? null) ? trim($identity['name']) : '';
+            $name = mb_substr($name === '' ? explode('@', $email)[0] : $name, 0, 100);
+            $q = $pdo->prepare('INSERT INTO admin_accounts (email, display_name, google_sub, session_key) VALUES (?, ?, ?, ?)');
+            $q->execute([$email, $name, $subject, bin2hex(random_bytes(32))]);
+        } elseif ($admin['google_sub'] === null) {
+            $pdo->prepare('UPDATE admin_accounts SET google_sub = ?, session_key = ?, session_version = session_version + 1 WHERE id = ?')->execute([$subject, bin2hex(random_bytes(32)), $admin['id']]);
         }
-        if ($step !== null) $pdo->prepare('UPDATE admin_accounts SET last_step = ? WHERE id = ?')->execute([$step, $admin['id']]);
-        else $pdo->prepare('UPDATE admin_accounts SET recovery_hashes = ? WHERE id = ?')->execute([json_encode($recovery), $admin['id']]);
-        admin_audit($recovery !== null ? 'login_recovery' : 'login', 'admin', (string) $admin['id'], [], [], '', $admin);
+        $q = $pdo->prepare('SELECT * FROM admin_accounts WHERE email = ?');
+        $q->execute([$email]); $admin = $q->fetch();
+        admin_audit('login_google', 'admin', (string) $admin['id'], [], [], '', $admin);
         $pdo->commit();
-        admin_clear_attempts('login:' . $email);
         admin_start_session($admin);
-        return 'ok';
     } catch (Throwable $e) { if ($pdo->inTransaction()) $pdo->rollBack(); throw $e; }
-}
-function admin_reauthenticate(array $admin, string $password): void {
-    if (!admin_attempt('reauth:' . $admin['id'])) throw new DomainException('Too many attempts. Try again in 15 minutes.', 429);
-    if (strlen($password) > 4096 || !password_verify($password, $admin['password_hash'])) throw new DomainException('Enter your current admin password to confirm.', 403);
-    admin_clear_attempts('reauth:' . $admin['id']);
 }
 function admin_reason(mixed $value): string {
     if (!is_string($value) || mb_strlen(trim($value)) < 5 || mb_strlen(trim($value)) > 500) throw new DomainException('Enter a reason between 5 and 500 characters.', 422);

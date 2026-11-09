@@ -1,37 +1,23 @@
-# Administrator access
+﻿# Administrator access
 
-Administrator access is separate from client and artist sign-in. Only Gmail addresses listed in `ADMIN_ALLOWED_EMAILS` can enroll, receive an invitation, or keep an active admin session. The local ignored configuration currently allows `reglariojayveesevilla@gmail.com`. Google sign-in by itself never grants administrator access.
+Administrators sign in with Google only. There is no separate admin password, authenticator enrollment, setup key, or recovery code. Only exact email addresses on the server's administrator allowlist can enter the workspace. Client and artist sign-in never grants administrator access.
 
-## First administrator on local XAMPP
+## Local XAMPP
 
-1. In the ignored `auth/config.local.php`, set `admin_password` to a private setup key with at least 16 characters. This is a one-time site-owner key for first setup and owner recovery; it is not the administrator's sign-in password.
-2. Leave the `admin_allowed_emails` list restricted to the intended Gmail address. Do not commit `auth/config.local.php`.
-3. Open `http://localhost/Capstone/Admin/setup.php`, select the allowed account, enter a display name, the site setup key, and a new admin password of at least 12 characters.
-4. Add the displayed authenticator key to an authenticator app as a time-based account with 6 digits and a 30-second interval. Enter the current code to finish enrollment.
-5. Save the one-time recovery codes somewhere private. They are hashed in the database and cannot be displayed again. Sign in from the site's Admin link with the Gmail address, admin password, and an authenticator or unused recovery code.
+1. Configure `google_client_id`, `google_client_secret`, and `google_redirect_uri` in the ignored `auth/config.local.php`, as described in [AUTH_SETUP.md](AUTH_SETUP.md). Admins use the same Google OAuth client and callback as other Google sign-ins.
+2. Set `admin_allowed_emails` to the intended administrators' Google account emails. Gmail and Google Workspace accounts are supported. Keep this list restricted; every listed account can become a full administrator.
+3. Open the site's Admin link, select **Continue with Google**, and choose an approved account. Its administrator record is created automatically on its first verified Google sign-in.
 
-The setup key must be configured before first enrollment. The application will not create a default admin password or open an unprotected admin account.
+## Hosted environment
 
-## Production environment
+Configure `ADMIN_ALLOWED_EMAILS` as a comma-separated list of approved Google account emails, plus `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, and the database variables. Redeploy after changing hosted environment variables. Local configuration does not transfer to the host.
 
-Set these sensitive or restricted variables in the hosting environment, then deploy:
+`ADMIN_PASSWORD` and `ADMIN_MFA_KEY` are no longer used and may be removed from local and hosted configuration.
 
-| Variable | Purpose |
-| --- | --- |
-| `ADMIN_PASSWORD` | Private site-owner setup and command-line recovery key, at least 16 characters |
-| `ADMIN_ALLOWED_EMAILS` | Comma-separated exact Gmail allowlist; currently `reglariojayveesevilla@gmail.com` |
-| `ADMIN_MFA_KEY` | Stable random encryption key, at least 32 characters, used to encrypt authenticator secrets |
+## Existing installations and controls
 
-Keep `ADMIN_MFA_KEY` stable. Changing it makes stored authenticator keys unreadable until they are reset. If it is omitted, the application derives the encryption key from `ADMIN_PASSWORD`; changing that value also requires an authenticator reset. Configure the allowlist in production as well as locally. The local file does not transfer to the host.
+Existing administrators keep their IDs, names, active/disabled status, and audit history. On the first Google sign-in, the application upgrades the admin table and binds the approved email to Google's stable account ID. Retired password, authenticator, and recovery columns are removed. Old admin sessions cannot access the workspace; sign in with Google again. Old setup links lead to the Google sign-in screen.
 
-## Recovery and controls
+Removing an email from the allowlist revokes access on the next request. Disabled administrators stay disabled and cannot regain access by signing in again. A different Google account cannot replace an already linked account merely by presenting the same email. Sessions expire after one hour, and signing out requires another Google sign-in.
 
-A recovery code is a one-time backup for a lost authenticator. It still requires the administrator's password. If both the authenticator and unused recovery codes are lost, the site owner can reset that allowed admin from the server's command line:
-
-```text
-php auth/admin-recover.php reglariojayveesevilla@gmail.com
-```
-
-The command asks for `ADMIN_PASSWORD`, rotates the authenticator secret and recovery codes, and signs out existing admin sessions. Run it only on a trusted server terminal; the new authenticator key and codes are printed once.
-
-Admins can manage users, suspend accounts and revoke their sessions, edit profiles, issue a one-time password-reset link, manage submitted projects and references, and invite or disable other allowlisted admins. Sensitive actions require the current admin password and a reason. Administrative changes and private reference views are recorded in the audit log. A reset link expires after 30 minutes, works once, and is not emailed automatically; share it privately with the verified account owner.
+The site owner adds approved administrators through the allowlist. Administrators can enable or disable existing administrators in the workspace, except themselves. Management actions retain CSRF protection, reasons, deletion confirmations, and audit logging. They no longer ask for an admin password. User password-reset links still expire after 30 minutes, work once, and are not emailed automatically.

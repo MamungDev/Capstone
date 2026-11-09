@@ -19,7 +19,7 @@ const { createHash } = require('node:crypto');
   const sessionDir = fs.mkdtempSync(path.join(os.tmpdir(), 'capstone-google-'));
   const base = `http://127.0.0.1:${port}/`;
   const env = { ...process.env, SESSION_DRIVER: 'files', SESSION_COOKIE_PATH: '/',
-    GOOGLE_CLIENT_ID: 'test-client.apps.googleusercontent.com', GOOGLE_CLIENT_SECRET: 'test-only-secret',
+    ADMIN_ALLOWED_EMAILS: 'admin@example.com', GOOGLE_CLIENT_ID: 'test-client.apps.googleusercontent.com', GOOGLE_CLIENT_SECRET: 'test-only-secret',
     GOOGLE_REDIRECT_URI: base + 'auth/google-callback.php' };
   delete env.VERCEL;
   let server;
@@ -47,8 +47,15 @@ const { createHash } = require('node:crypto');
     const html = await home.text();
     assert.match(html, /Continue with Google/);
     assert.ok(!html.includes(env.GOOGLE_CLIENT_SECRET));
-    const invalid = await request('auth/google-start.php?role=admin');
+    const invalid = await request('auth/google-start.php?role=invalid');
     assert.equal(invalid.headers.get('location'), '../index.php');
+    const adminMarkup = html.match(/<dialog id="admin-modal"[\s\S]*?<\/dialog>/)[0];
+    assert.match(adminMarkup, /auth\/google-start\.php\?role=admin/);
+    assert.doesNotMatch(adminMarkup, /name="(?:password|code|email)"|Admin\/setup\.php/);
+    const legacy = await request('Admin/login.php', { method: 'POST', body: new URLSearchParams({ password: 'old-password', code: '123456' }) });
+    assert.equal(legacy.status, 405);
+    const setup = await request('Admin/setup.php');
+    assert.equal(setup.headers.get('location'), '../index.php?auth=admin');
     // Node fetch normalizes Host; use a raw HTTP request to simulate another deployment hostname.
     const alternate = await new Promise((resolve, reject) => {
       http.get(base + 'auth/google-start.php?role=artist', { headers: { Host: 'preview.invalid' } }, response => {
@@ -57,7 +64,7 @@ const { createHash } = require('node:crypto');
       }).on('error', reject);
     });
     assert.equal(alternate, base + 'auth/google-start.php?role=artist');
-    for (const role of ['client', 'artist']) {
+    for (const role of ['client', 'artist', 'admin']) {
       const start = await request('auth/google-start.php?role=' + role);
       assert.equal(start.status, 302);
       const location = new URL(start.headers.get('location'));

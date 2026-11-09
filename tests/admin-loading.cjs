@@ -25,12 +25,11 @@ const server = createServer((request, response) => {
     response.setHeader('Content-Type', 'text/css');
     return setTimeout(() => response.end('body { margin: 0; }'), 1000);
   }
-  if (!['/Admin/index.php', '/Admin/setup.php'].includes(url.pathname)) { response.writeHead(404); return response.end(); }
-  const setup = url.pathname.endsWith('setup.php');
-  // Use the actual PHP pages' asset tags and the setup page's restrictive CSP.
-  const php = readFileSync(join(root, setup ? 'Admin/setup.php' : 'Admin/index.php'), 'utf8');
+  if (url.pathname !== '/Admin/index.php') { response.writeHead(404); return response.end(); }
+  // Use the workspace's actual asset tags under a restrictive CSP.
+  const php = readFileSync(join(root, 'Admin/index.php'), 'utf8');
   const tags = php.match(/<(?:link|script)[^\n]*admin-loading\.(?:css|js)[^\n]*/g).join('\n').replace(/<\?=.*?\?>/g, 'test');
-  response.setHeader('Content-Type', 'text/html');
+  response.setHeader('Content-Type', 'text/html; charset=utf-8');
   response.setHeader('Content-Security-Policy', "default-src 'self'; style-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'");
   setTimeout(() => response.end('<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">' + tags +
     '<link rel="stylesheet" href="/slow.css"></head><body><main><h1>Loaded admin</h1><a id="accounts" href="?tab=accounts">Accounts</a>' +
@@ -70,7 +69,7 @@ const server = createServer((request, response) => {
     const evaluate = async expression => (await send('Runtime.evaluate', { expression, returnByValue: true })).result?.result?.value;
     const until = async (expression, label) => {
       for (let i = 0; i < 100; i++) { if (await evaluate(expression)) return; await delay(50); }
-      assert.fail(label);
+      assert.fail(label + ': ' + JSON.stringify(await evaluate("({url:location.href,ready:document.readyState,status:document.querySelector('.admin-skeleton-status')?.textContent,inert:document.body?.inert})")));
     };
     const visible = "!!document.getElementById('admin-loading')";
     const settled = "document.readyState === 'complete' && !document.getElementById('admin-loading')";
@@ -91,23 +90,24 @@ const server = createServer((request, response) => {
     await evaluate("document.querySelector('input[name=q]').value = 'test'; document.querySelector('form button').click()");
     await until(visible + " && document.querySelector('.admin-skeleton-status').textContent === 'Loading projects…'", 'Search shows destination skeleton');
     await until(settled + " && location.search.includes('q=test')", 'Search completes');
-    await evaluate("document.getElementById('save').requestSubmit()");
+    // Observe the handler before native navigation can freeze the outgoing page's timers.
+    await evaluate("document.getElementById('save').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))");
     await until(visible + " && document.querySelector('.admin-skeleton-status').textContent === 'Saving changes…'", 'POST shows saving state');
+    await evaluate("document.getElementById('save').submit()");
     await until(settled, 'POST completes');
     await evaluate("document.getElementById('activity').addEventListener('click', e => e.preventDefault()); document.getElementById('activity').click()");
     await delay(250);
     assert.equal(await evaluate(visible), false, 'Cancelled navigation does not cover page');
     await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
     await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
-    for (const route of ['index.php?tab=overview', 'index.php?tab=accounts', 'setup.php']) {
+    for (const route of ['index.php?tab=overview', 'index.php?tab=accounts']) {
       await send('Page.navigate', { url: base + '/Admin/' + route });
       await until(visible, 'Mobile skeleton appears');
       assert.equal(await evaluate("document.getElementById('admin-loading').scrollWidth <= innerWidth"), true, 'Fits mobile');
       assert.equal(await evaluate("getComputedStyle(document.querySelector('.admin-skeleton-block')).animationName"), 'none', 'Respects reduced motion');
-      if (route === 'setup.php') assert.equal(await evaluate("document.getElementById('admin-loading').className"), 'admin-skeleton-setup');
       await until(settled, 'Mobile skeleton clears');
     }
-    console.log('PASS: admin tabs, setup CSP, initial load, navigation, GET/POST forms, validation, cancelled navigation, mobile layout, reduced motion, and cleanup.');
+    console.log('PASS: admin tabs, restrictive CSP, initial load, navigation, GET/POST forms, validation, cancelled navigation, mobile layout, reduced motion, and cleanup.');
   } finally {
     socket?.close();
     if (browser && browser.exitCode === null) { const stopped = once(browser, 'exit'); browser.kill(); await stopped; }

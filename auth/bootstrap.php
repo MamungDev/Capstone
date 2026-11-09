@@ -109,8 +109,6 @@ function app_config(): array
             'db_sslmode' => 'DB_SSLMODE',
             'db_ssl_ca' => 'DB_SSL_CA',
             'db_ssl_ca_pem' => 'DB_SSL_CA_PEM',
-            'admin_password' => 'ADMIN_PASSWORD',
-            'admin_mfa_key' => 'ADMIN_MFA_KEY',
             'admin_allowed_emails' => 'ADMIN_ALLOWED_EMAILS',
             'google_client_id' => 'GOOGLE_CLIENT_ID',
             'google_client_secret' => 'GOOGLE_CLIENT_SECRET',
@@ -192,7 +190,6 @@ function ensure_database_schema(): void
         db()->query('SELECT 1 FROM admin_login_limits LIMIT 0');
         db()->query('SELECT 1 FROM admin_accounts LIMIT 0');
         db()->query('SELECT 1 FROM admin_audit LIMIT 0');
-        db()->query('SELECT 1 FROM admin_invites LIMIT 0');
         db()->query('SELECT 1 FROM admin_security_lock LIMIT 0');
         db()->query('SELECT 1 FROM account_controls LIMIT 0');
         db()->query('SELECT 1 FROM password_reset_tokens LIMIT 0');

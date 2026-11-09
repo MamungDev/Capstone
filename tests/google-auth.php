@@ -43,10 +43,11 @@ rejects(static fn () => $verify('invalid.token'));
 
 $pending = ['state' => bin2hex(random_bytes(32)), 'nonce' => $nonce, 'code_verifier' => bin2hex(random_bytes(32)), 'created_at' => time(), 'role' => 'artist'];
 check(google_pending_valid($pending, $pending['state']), 'Valid pending login rejected.');
+check(google_pending_valid(array_replace($pending, ['role' => 'admin']), $pending['state']), 'Admin Google flow rejected.');
 check(!google_pending_valid($pending, 'wrong'), 'Wrong state accepted.');
 check(!google_pending_valid($pending, []), 'Array state accepted.');
 check(!google_pending_valid(null, $pending['state']), 'Missing session accepted.');
-foreach ([['created_at' => time() - 601], ['created_at' => time() + 3600], ['role' => 'admin'], ['code_verifier' => '']] as $invalid) {
+foreach ([['created_at' => time() - 601], ['created_at' => time() + 3600], ['role' => 'invalid'], ['code_verifier' => '']] as $invalid) {
     check(!google_pending_valid(array_replace($pending, $invalid), $pending['state']), 'Invalid pending login accepted.');
 }
 $config = ['google_client_id' => 'test-client', 'google_client_secret' => 'test-secret', 'google_redirect_uri' => 'https://example.com/auth/google-callback.php'];

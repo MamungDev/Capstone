@@ -13,7 +13,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
 
 function google_failure(string $code, string $role = 'client'): never
 {
-    $role = in_array($role, ['client', 'artist'], true) ? $role : 'client';
+    $role = in_array($role, ['client', 'artist', 'admin'], true) ? $role : 'client';
     header('Location: ../index.php?auth=' . $role . '&notice=' . rawurlencode($code), true, 303);
     exit;
 }
@@ -43,6 +43,13 @@ try {
     $stage = 'identity verification';
     $certificates = google_json_request('https://www.googleapis.com/oauth2/v1/certs');
     $identity = verified_google_identity($token['id_token'], $config['google_client_id'], $pending['nonce'], $certificates);
+    if ($role === 'admin') {
+        require_once __DIR__ . '/admin.php';
+        $stage = 'admin sign-in';
+        admin_google_signin($identity);
+        header('Location: ../Admin/index.php', true, 303);
+        exit;
+    }
     $stage = 'account sign-in';
     ensure_onboarding_column();
     sign_in_user(google_account(db(), $identity, $role));

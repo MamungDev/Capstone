@@ -22,7 +22,7 @@ function google_pending_valid(mixed $pending, mixed $state): bool
         $pending['created_at'] <= time() &&
         is_string($pending['nonce'] ?? null) && strlen($pending['nonce']) === 64 &&
         is_string($pending['code_verifier'] ?? null) && strlen($pending['code_verifier']) === 64 &&
-        in_array($pending['role'] ?? null, ['client', 'artist'], true);
+        in_array($pending['role'] ?? null, ['client', 'artist', 'admin'], true);
 }
 
 // Google subject is the identity key. Matching email alone never links an account.

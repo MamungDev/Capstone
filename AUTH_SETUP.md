@@ -1,4 +1,4 @@
-﻿# Local account demo
+# Local account demo
 
 This project uses the XAMPP MySQL server for registration. phpMyAdmin lets you inspect the `mamungkun_capstone` database and its `users` table; PHP connects to that database through PDO. The tables were created locally from [auth/schema.sql](auth/schema.sql). On another computer, first create/select a MySQL database, then import that SQL file into it.
 
@@ -70,13 +70,11 @@ References: [Google web server OAuth flow](https://developers.google.com/identit
 
 Choose Admin on the homepage to open the sign-in modal. `/Admin/login.php` redirects signed-out visitors to that modal. Successful sign-in opens `/Admin/index.php` to manage the accounts in the database used by that deployment. Signed-out visitors to the account manager are redirected to sign-in. The manager lists names, emails, roles, registration dates, and submitted brief counts, with search, role filters, and pagination. App client and artist passwords do not grant admin access.
 
-Administrator access is separate from client and artist accounts and uses a named admin account, password, and authenticator code. Follow [ADMIN_SETUP.md](ADMIN_SETUP.md) for the current setup and recovery instructions. In particular, `ADMIN_PASSWORD` is the private first-setup/recovery key; it is **not** the password entered at the normal admin sign-in screen. The normal sign-in password is created during admin enrollment, and the authenticator must be enrolled against the same deployment and database that you sign into.
+Administrator access uses Google sign-in only and stays separate from client and artist accounts. Set the exact approved Google emails in `ADMIN_ALLOWED_EMAILS` (or `admin_allowed_emails` locally), along with the Google OAuth and database settings above. No separate admin password, authenticator enrollment, setup key, or recovery codes are required. See [ADMIN_SETUP.md](ADMIN_SETUP.md).
 
-For Vercel, configure `ADMIN_PASSWORD`, `ADMIN_ALLOWED_EMAILS`, `ADMIN_MFA_KEY`, and the hosted database variables in the intended deployment environment, then redeploy. `ADMIN_MFA_KEY` must remain stable after enrollment. Local `auth/config.local.php` and the XAMPP database are separate from Vercel and do not create or transfer a production administrator. Ten failed admin sign-in attempts lock that email's sign-in for 15 minutes.
+Select **Delete** to review an account and its brief count, then type its exact email to confirm. Confirming permanently deletes that account and all its submitted briefs, including attached images and sketches. Other accounts are preserved. A deleted account loses access on its next request. The manager does not show credentials. It supports profile editing and one-time password-reset links for client and artist accounts.
 
-Select **Delete** to review an account and its brief count, then type its exact email to confirm. Confirming permanently deletes that account and all its submitted briefs, including attached images and sketches. Other accounts are preserved. A deleted account loses access on its next request. The manager does not show password hashes or support account editing or password resets yet.
-
-Run `node tests/admin-accounts.cjs` with XAMPP MySQL running to check admin authentication, access restrictions, CSRF, search/filter/pagination, deletion, shared login limits, and password rotation. This uses a temporary database and a local PHP server and cleans them up afterwards; existing accounts are not deleted. Set `PHP_BINARY` if PHP is installed somewhere other than `C:/xampp/php/php.exe`.
+Run `node tests/admin-accounts.cjs` with XAMPP MySQL running to check admin authentication, access restrictions, CSRF, search/filter/pagination, deletion, Google account restrictions, session revocation, and legacy migration. This uses a temporary database and a local PHP server and cleans them up afterwards; existing accounts are not deleted. Set `PHP_BINARY` if PHP is installed somewhere other than `C:/xampp/php/php.exe`.
 
 ## Vercel deployment
 
