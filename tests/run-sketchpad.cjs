@@ -12,7 +12,7 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
   let browser, socket;
   try {
     const executable = process.argv[2] || 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe';
-    const pageUrl = pathToFileURL(resolve(__dirname, 'sketchpad.html')).href;
+    const pageUrl = pathToFileURL(resolve(__dirname, process.argv[3] || 'sketchpad.html')).href;
     browser = spawn(executable, ['--headless', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
       '--user-data-dir=' + profile, '--allow-file-access-from-files', '--remote-debugging-port=0', pageUrl],
       { stdio: 'ignore', windowsHide: true });

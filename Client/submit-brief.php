@@ -27,12 +27,22 @@ if (!is_string($accessCode) || !preg_match('/^[a-f0-9]{32}$/D', $accessCode)) {
 }
 $details = [];
 foreach (['projectName' => 120, 'projectType' => 80, 'idea' => 5000, 'audience' => 1000, 'goal' => 1000,
-    'format' => 80, 'style' => 80, 'energy' => 80, 'referenceName' => 255] as $field => $max) {
+    'format' => 80, 'style' => 80, 'energy' => 80, 'referenceName' => 255,
+    'resolution' => 80, 'note' => 2000, 'font' => 120] as $field => $max) {
     $value = $source[$field] ?? '';
     if (!is_string($value) || mb_strlen($value) > $max) json_response(['error' => "$field must be text of at most $max characters."], 422);
     $details[$field] = trim($value);
 }
 if ($details['projectName'] === '' || $details['idea'] === '') json_response(['error' => 'Add a project name and description.'], 422);
+if ($details['resolution'] !== '' && !in_array($details['resolution'], ['1920 × 1080 px', '1280 × 720 px', '2560 × 1440 px', '3840 × 2160 px', '1080 × 1080 px', '1080 × 1350 px', '1080 × 1920 px', '2480 × 3508 px'], true)) {
+    json_response(['error' => 'Choose a resolution size from the available options.'], 422);
+}
+$palette = $source['palette'] ?? [];
+if (!is_array($palette) || !array_is_list($palette) || count($palette) > 8) json_response(['error' => 'Choose up to eight palette colors.'], 422);
+foreach ($palette as $color) {
+    if (!is_string($color) || !preg_match('/^#[0-9a-fA-F]{6}$/D', $color)) json_response(['error' => 'Use six-digit hex colors in your palette.'], 422);
+}
+$details['palette'] = array_values(array_unique(array_map('strtoupper', $palette)));
 $tags = $source['tags'] ?? [];
 if (!is_array($tags) || !array_is_list($tags) || count($tags) > 8) json_response(['error' => 'Choose up to eight keywords.'], 422);
 foreach ($tags as $tag) {

@@ -80,8 +80,11 @@ try {
             <div class="card">
                 <div class="summary"><strong>Private project code</strong><input aria-label="Private project code" readonly value="<?= html($accessCode) ?>" onclick="this.select()"><p class="subtle">Share this code only with your chosen artist. They must enter it in their inbox to receive this brief and its references.</p></div>
                 <?php foreach ([
-                    'Project type' => $details['projectType'],
+                    (($details['resolution'] ?? '') !== '' ? 'Resolution size' : 'Project type') => ($details['resolution'] ?? '') ?: $details['projectType'],
                     'Idea' => $details['idea'],
+                    'Additional note' => ($details['note'] ?? '') ?: 'Not specified',
+                    'Preferred font' => ($details['font'] ?? '') ?: 'No preference',
+                    'Preferred color palette' => implode(', ', $details['palette'] ?? []) ?: 'No preference',
                     'Audience' => $details['audience'] ?: 'Not specified',
                     'Goal' => $details['goal'] ?: 'Not specified',
                     'Direction' => implode(' · ', [$details['style'], $details['energy'], $details['format']]),

@@ -3,7 +3,7 @@
   const storageKey = 'capstone-client-brief-v1:' + window.CLIENT_SESSION.id;
   const defaults = {
     flowVersion: 2, step: 1, submitted: false,
-    projectName: '', projectType: 'Poster', idea: '',
+    projectName: '', projectType: '', resolution: '1920 × 1080 px', idea: '', note: '', font: '', palette: [],
     audience: '', goal: '', tags: [], format: 'Poster · 4:5',
     style: 'Hand-crafted', energy: 'Warm & rich',
     references: [],
@@ -24,10 +24,12 @@
   function normalizeBrief(stored) {
     if (!stored || typeof stored !== 'object' || Array.isArray(stored)) stored = {};
     let brief = { ...defaults, ...stored };
-    for (const key of ['projectName', 'projectType', 'idea', 'audience', 'goal', 'format', 'style', 'energy']) {
+    for (const key of ['projectName', 'projectType', 'resolution', 'idea', 'note', 'font', 'audience', 'goal', 'format', 'style', 'energy']) {
       if (typeof brief[key] !== 'string') brief[key] = defaults[key];
     }
     brief.tags = Array.isArray(brief.tags) ? brief.tags.filter(tag => typeof tag === 'string') : [];
+    brief.palette = Array.isArray(brief.palette) ? [...new Set(brief.palette.filter(color => typeof color === 'string' && /^#[0-9a-f]{6}$/i.test(color)).map(color => color.toUpperCase()))].slice(0, 8) : [];
+    if (!resolutions.includes(brief.resolution)) brief.resolution = defaults.resolution;
     brief.step = [1, 2, 3, 4].includes(brief.step) ? brief.step : 1;
     brief.submitted = brief.submitted === true && /^[a-f0-9]{32}$/.test(brief.submissionId || '');
     const validImage = value => typeof value === 'string' && /^data:image\/(png|jpeg|webp|gif);base64,/.test(value);
@@ -49,10 +51,32 @@
     }
     return brief;
   }
+  const resolutions = ['1920 × 1080 px', '1280 × 720 px', '2560 × 1440 px', '3840 × 2160 px', '1080 × 1080 px', '1080 × 1350 px', '1080 × 1920 px', '2480 × 3508 px'];
+  const paletteTemplates = [
+    { name: 'Ocean blue', colors: ['#1D355F', '#074766', '#255C76', '#0A6C9F', '#3D9ECB'] },
+    { name: 'Warm sunset', colors: ['#71334A', '#B95050', '#E67E51', '#F4B36B', '#FFE0A3'] },
+    { name: 'Forest greens', colors: ['#203E36', '#3C6250', '#68866A', '#A3B68A', '#E1E7C5'] },
+    { name: 'Soft pastels', colors: ['#B8B8E3', '#D6C4E9', '#F0CAD6', '#F6DFCD', '#D7E7DE'] },
+    { name: 'Earth & clay', colors: ['#543D35', '#91634C', '#BB8B68', '#D7BA98', '#F0E5D5'] },
+    { name: 'Modern neutrals', colors: ['#24262B', '#515661', '#9297A1', '#CDD0D5', '#F3F1EC'] },
+    { name: 'Lavender dusk', colors: ['#392F5A', '#665191', '#9B80BC', '#C9B6DD', '#EEE5F5'] },
+    { name: 'Cherry blossom', colors: ['#703D57', '#AC6584', '#D998B1', '#F1C6D3', '#FFF0F3'] },
+    { name: 'Tropical punch', colors: ['#006D77', '#19A7A0', '#F4D35E', '#F48C64', '#D94F70'] },
+    { name: 'Citrus grove', colors: ['#426B32', '#8BAA42', '#D5CC55', '#F6AA35', '#FFF1B8'] },
+    { name: 'Midnight neon', colors: ['#15162C', '#5534A5', '#B83DCE', '#29D9D5', '#D9F75B'] },
+    { name: 'Coastal breeze', colors: ['#28666E', '#6DA8AC', '#B5D9D6', '#E9DEC8', '#FFF7E8'] },
+    { name: 'Vintage rose', colors: ['#583F4A', '#926775', '#BE969A', '#DFC6BE', '#F2E8DB'] },
+    { name: 'Desert dusk', colors: ['#59445F', '#9C6474', '#CF8B78', '#E8B68E', '#F5DCC0'] },
+    { name: 'Golden hour', colors: ['#523C27', '#966B32', '#C8963E', '#E8BF64', '#FFF0C2'] },
+    { name: 'Berry sorbet', colors: ['#5C245C', '#993568', '#CF5680', '#EC96A4', '#FAD9D7'] },
+    { name: 'Arctic frost', colors: ['#30485F', '#6A8CA5', '#A7C6D5', '#D6E6ED', '#F2F8FA'] },
+    { name: 'Retro pop', colors: ['#293C69', '#D85A48', '#E8AE45', '#6E9C88', '#F4E5C3'] },
+  ];
   let brief = normalizeBrief(stored);
   let renderedStep = null;
   let submitting = false;
   let addingReferences = false;
+  let paletteTemplatesExpanded = false;
 
   const app = document.querySelector('#app');
   const toast = document.querySelector('#toast');
@@ -133,19 +157,84 @@
         <p class="subtle" style="margin:0 0 22px">You can keep this rough—plain language is perfect.</p>
         <div class="field-grid">
           <label class="field">Project name<input id="projectName" maxlength="120" placeholder="e.g. Midnight Sessions" value="${escape(brief.projectName)}"></label>
-          <label class="field">What are you making?<select id="projectType"><option>Poster</option><option>Social post</option><option>Event identity</option><option>Album cover</option><option>Presentation</option><option>Something else</option></select></label>
+          <div class="field resolution-field"><label for="resolution">Resolution size</label><select id="resolution" aria-describedby="resolutionPreviewNote">${resolutions.map(size => `<option>${size}</option>`).join('')}</select><figure class="resolution-preview"><div id="resolutionPreview" aria-live="polite"></div><figcaption id="resolutionPreviewNote">Scaled to fit. The canvas keeps your selected proportions.</figcaption></figure></div>
           <label class="field full">Describe the idea<textarea id="idea" maxlength="5000" placeholder="What should this feel like? What makes it special?">${escape(brief.idea)}</textarea></label>
+          <label class="field full">Additional note (optional)<textarea id="note" maxlength="2000" placeholder="Anything else your artist should know?">${escape(brief.note)}</textarea></label>
           <label class="field">Who is it for?<input id="audience" maxlength="1000" placeholder="e.g. curious late-night music fans" value="${escape(brief.audience)}"></label>
           <label class="field">What should it achieve?<input id="goal" maxlength="1000" placeholder="e.g. get people to the first show" value="${escape(brief.goal)}"></label>
         </div>
       </section>
+      <section class="card brief-preferences">
+        <div class="row"><h2>Make it your own</h2><span class="hint">Optional</span></div>
+        <p class="subtle">Share your preferred colors, font, and images to guide your artist.</p>
+        <div class="field-grid">
+          <div class="field full"><span id="paletteLabel">Preferred color palette</span>
+            <button class="palette-toggle" id="togglePaletteTemplates" type="button" aria-expanded="${paletteTemplatesExpanded}" aria-controls="paletteTemplatePanel"><span>Palette templates <span class="palette-toggle-count">(${paletteTemplates.length})</span></span><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true"><path d="m5 7.5 5 5 5-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+            <div id="paletteTemplatePanel" ${paletteTemplatesExpanded ? '' : 'hidden'}>
+            <p class="palette-help">Choose a template to replace your palette, then customize the colors below.</p>
+            <div class="palette-templates" role="group" aria-label="Color palette templates">${paletteTemplates.map((template, index) => `<button class="palette-template" type="button" data-palette-template="${index}" aria-pressed="false" aria-label="Use ${escape(template.name)} palette: ${template.colors.join(', ')}"><span class="palette-strip" aria-hidden="true">${template.colors.map(color => `<span style="background-color:${color}"></span>`).join('')}</span><span class="palette-template-caption"><strong>${escape(template.name)}</strong><span class="palette-template-status">Use palette</span></span></button>`).join('')}</div>
+            </div>
+            <div class="palette-selection-heading"><strong>Your palette</strong><button class="small" type="button" id="clearPalette">Clear palette</button></div>
+            <div id="paletteChoices" aria-labelledby="paletteLabel"></div>
+            <div class="palette-controls"><input id="paletteColor" type="color" value="#3659E3" aria-label="Choose a palette color"><button class="small" type="button" id="addColor">Add color</button><span class="subtle">Customize with up to 8 colors</span></div>
+          </div>
+          <label class="field full">Preferred font<input id="font" list="fontSuggestions" maxlength="120" placeholder="Choose a suggestion or type any font name" value="${escape(brief.font)}"><datalist id="fontSuggestions">${['Manrope', 'Playfair Display', 'Arial', 'Georgia', 'Times New Roman', 'Montserrat', 'Poppins', 'Roboto'].map(font => `<option value="${font}"></option>`).join('')}</datalist></label>
+        </div>
+        <div class="row reference-upload"><div><h3>Reference images</h3><p class="subtle">PNG, JPEG, WebP, or GIF; up to 2 MB each. You can add sketches in References.</p></div><input id="file" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden><button class="small" type="button" id="upload" ${addingReferences ? 'disabled' : ''}>${addingReferences ? 'Adding images…' : 'Choose images'}</button></div>
+        ${referenceGallery(true)}
+      </section>
       ${footer(null, 'Continue to direction')}`;
-    document.querySelector('#projectType').value = brief.projectType;
-    ['projectName', 'projectType', 'idea', 'audience', 'goal'].forEach(key => {
-      document.querySelector('#' + key).oninput = event => { brief[key] = event.target.value; save(); };
-      document.querySelector('#' + key).onchange = event => { brief[key] = event.target.value; save(); };
+    document.querySelector('#resolution').value = brief.resolution;
+    renderResolutionPreview();
+    ['projectName', 'resolution', 'idea', 'note', 'font', 'audience', 'goal'].forEach(key => {
+      const update = event => {
+        brief[key] = event.target.value;
+        if (key === 'resolution') renderResolutionPreview();
+        save();
+      };
+      document.querySelector('#' + key).oninput = update;
+      document.querySelector('#' + key).onchange = update;
     });
+    const renderPalette = () => {
+      document.querySelector('#paletteChoices').innerHTML = palettePreview(true);
+      document.querySelector('#addColor').disabled = brief.palette.length >= 8;
+      document.querySelector('#clearPalette').hidden = !brief.palette.length;
+      app.querySelectorAll('[data-palette-template]').forEach(button => {
+        const template = paletteTemplates[Number(button.dataset.paletteTemplate)];
+        const selected = template.colors.length === brief.palette.length && template.colors.every((color, index) => color === brief.palette[index]);
+        button.setAttribute('aria-pressed', String(selected));
+        button.querySelector('.palette-template-status').textContent = selected ? 'Selected' : 'Use palette';
+      });
+      app.querySelectorAll('[data-remove-color]').forEach(button => button.onclick = () => {
+        brief.palette = brief.palette.filter(color => color !== button.dataset.removeColor);
+        save(); renderPalette(); document.querySelector('#addColor').focus();
+      });
+    };
+    renderPalette();
+    document.querySelector('#togglePaletteTemplates').onclick = event => {
+      paletteTemplatesExpanded = !paletteTemplatesExpanded;
+      event.currentTarget.setAttribute('aria-expanded', String(paletteTemplatesExpanded));
+      document.querySelector('#paletteTemplatePanel').hidden = !paletteTemplatesExpanded;
+    };
+    app.querySelectorAll('[data-palette-template]').forEach(button => button.onclick = () => {
+      const template = paletteTemplates[Number(button.dataset.paletteTemplate)];
+      brief.palette = [...template.colors];
+      save(); renderPalette(); say(template.name + ' palette selected. You can customize its colors below.');
+    });
+    document.querySelector('#clearPalette').onclick = () => {
+      brief.palette = []; save(); renderPalette(); document.querySelector('#addColor').focus();
+    };
+    document.querySelector('#addColor').onclick = () => {
+      const color = document.querySelector('#paletteColor').value.toUpperCase();
+      if (brief.palette.includes(color)) return say('That color is already in your palette.');
+      if (brief.palette.length >= 8) return;
+      brief.palette = [...brief.palette, color]; save(); renderPalette();
+    };
+    document.querySelector('#upload').onclick = () => document.querySelector('#file').click();
+    document.querySelector('#file').onchange = handleFile;
+    bindReferenceActions();
     bindFooter(null, () => {
+      if (addingReferences) return say('Please wait for your images to finish loading.');
       if (!brief.projectName.trim() || !brief.idea.trim()) {
         say('Add a project name and a short description to continue.');
         document.querySelector(!brief.projectName.trim() ? '#projectName' : '#idea').focus();
@@ -153,6 +242,36 @@
       }
       brief.step = 2; save(); render();
     });
+  }
+
+  function renderResolutionPreview() {
+    const [width, height] = brief.resolution.match(/\d+/g).map(Number);
+    const scale = Math.min(240 / width, 140 / height);
+    const previewWidth = width * scale, previewHeight = height * scale;
+    const x = (320 - previewWidth) / 2, y = (190 - previewHeight) / 2;
+    const gcd = (a, b) => b ? gcd(b, a % b) : a;
+    const divisor = gcd(width, height);
+    const shape = width === height ? 'Square' : width > height ? 'Landscape' : 'Portrait';
+    document.querySelector('#resolutionPreview').innerHTML = `
+      <svg viewBox="0 0 320 190" role="img" aria-label="Blank ${width} by ${height} pixel canvas, ${shape.toLowerCase()}">
+        <rect class="resolution-canvas" x="${x}" y="${y}" width="${previewWidth}" height="${previewHeight}" />
+        <text x="160" y="${y - 10}" text-anchor="middle">${width} px</text>
+        <text transform="translate(${x + previewWidth + 16} 95) rotate(90)" text-anchor="middle">${height} px</text>
+      </svg>
+      <p class="resolution-shape">${shape} <span aria-hidden="true">·</span> ${width / divisor}:${height / divisor}</p>`;
+  }
+
+  function palettePreview(editable = false) {
+    if (!brief.palette.length) return '<p class="subtle">No preferred colors selected.</p>';
+    return '<div class="palette-strip palette-selected-strip" aria-hidden="true">' + brief.palette.map(color => `<span style="background-color:${color}"></span>`).join('') + '</div><div class="palette-swatches">' + brief.palette.map(color => `<span class="palette-swatch"><span class="palette-dot" style="background-color:${color}" aria-hidden="true"></span>${color}${editable ? `<button type="button" data-remove-color="${color}" aria-label="Remove ${color}">&times;</button>` : ''}</span>`).join('') + '</div>';
+  }
+
+  function bindReferenceActions() {
+    app.querySelectorAll('[data-remove-reference]').forEach(button => button.onclick = () => {
+      brief.references = brief.references.filter(item => item.id !== button.dataset.removeReference);
+      save(); render(); say('Reference removed.');
+    });
+    app.querySelectorAll('[data-edit-reference]').forEach(button => button.onclick = () => openSketch(button.dataset.editReference));
   }
 
   function renderDirection() {
@@ -223,11 +342,7 @@
       sketchOwner = null;
       save(); render(); say('All references removed.');
     };
-    app.querySelectorAll('[data-remove-reference]').forEach(button => button.onclick = () => {
-      brief.references = brief.references.filter(item => item.id !== button.dataset.removeReference);
-      save(); render(); say('Reference removed.');
-    });
-    app.querySelectorAll('[data-edit-reference]').forEach(button => button.onclick = () => openSketch(button.dataset.editReference));
+    bindReferenceActions();
     bindFooter(2, () => { if (addingReferences) return say('Please wait for your images to finish loading.'); brief.step = 4; save(); render(); });
   }
 
@@ -273,6 +388,7 @@
       <div class="eyebrow">Step 04 — review your brief</div>
       <h1>Your brief is <em>taking shape.</em></h1>
       <p class="intro">Review the essentials and submit when it feels right.</p>
+      <section class="card brief-preferences"><div class="summary"><strong>Resolution size</strong><div>${escape(brief.resolution)}</div></div><div class="summary"><strong>Additional note</strong><div>${escape(brief.note || 'Not specified')}</div></div><div class="summary"><strong>Preferred font</strong><div>${escape(brief.font || 'No preference')}</div></div><div class="summary"><strong>Preferred color palette</strong>${palettePreview()}</div></section>
       <section class="review"><div class="card"><div class="summary"><strong>Project</strong><div>${escape(brief.projectName)}</div></div><div class="summary"><strong>Idea</strong><div>${escape(brief.idea)}</div></div><div class="summary"><strong>Audience & goal</strong><div>${escape(brief.audience || 'Not specified')} · ${escape(brief.goal || 'Not specified')}</div></div><div class="summary"><strong>Direction</strong><div>${escape(brief.style)} · ${escape(brief.energy)} · ${escape(brief.format)}</div></div><div class="summary"><strong>Keywords</strong><div>${brief.tags.length ? brief.tags.map(tag => `<span class="chip on" style="display:inline-block;margin:0 5px 5px 0">${escape(tag)}</span>`).join('') : 'No keywords selected'}</div></div></div><div class="card"><h2>Visual references (${brief.references.length})</h2>${referenceGallery()}</div></section>
       <section class="card private-code"><h2>Private project code</h2><p class="subtle">After submitting, share this code only with your chosen artist. They must enter it to receive your brief and references.</p><label for="accessCode">Your unique code</label><div class="code-actions"><input id="accessCode" readonly value="${escape(brief.accessCode)}" spellcheck="false"><button class="small" type="button" id="copyCode">Copy code</button></div><p class="subtle">You can find this code again in My briefs.</p></section>
       <p id="submissionStatus" role="status" aria-live="polite"></p>
@@ -313,7 +429,7 @@
       try {
         const snapshot = {};
         snapshot.accessCode = brief.accessCode;
-        for (const key of ['projectName', 'projectType', 'idea', 'audience', 'goal', 'format', 'style', 'energy', 'tags']) snapshot[key] = brief[key];
+        for (const key of ['projectName', 'projectType', 'resolution', 'idea', 'note', 'font', 'palette', 'audience', 'goal', 'format', 'style', 'energy', 'tags']) snapshot[key] = brief[key];
         snapshot.references = [];
         for (const [index, reference] of brief.references.entries()) {
           status.textContent = `Uploading reference ${index + 1} of ${brief.references.length}: ${reference.name}`;

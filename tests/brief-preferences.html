@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Brief preference regression</title>
+<link rel="stylesheet" href="../Client/client.css">
+<div class="shell">
+  <button id="reset">Reset</button><button id="logout">Log out</button>
+  <span id="saved"></span><div id="progress"></div>
+  <div class="labels"><span>Describe</span><span>Direction</span><span>References</span><span>Review</span></div>
+  <main id="app" tabindex="-1"></main><div id="toast"></div>
+</div>
+<pre id="results">Running…</pre>
+<script>
+window.CLIENT_SESSION = { id: 'preference-test', csrf: 'test' };
+window.testDraft = { projectName: 'Legacy draft', projectType: 'Poster', idea: 'Legacy idea', step: 1 };
+window.clientDraftStore = {
+  load: async () => structuredClone(window.testDraft),
+  save: async (key, value) => { window.testDraft = structuredClone(value); }
+};
+window.createClientSketchpad = () => ({ open() {} });
+window.confirm = () => true;
+window.testRequests = [];
+window.fetch = async (url, options) => {
+  const payload = JSON.parse(options.body);
+  window.testRequests.push({ url, payload });
+  return { ok: true, json: async () => ({ ok: true, id: payload.id || payload.submissionId }) };
+};
+</script>
+<script src="../Client/client.js"></script>
+<script>
+(async () => {
+  const wait = async predicate => {
+    for (let i = 0; i < 200; i++) {
+      if (predicate()) return;
+      await new Promise(resolve => setTimeout(resolve, 20));
+    }
+    throw new Error('Timed out waiting for UI');
+  };
+  const assert = (condition, message) => { if (!condition) throw new Error(message); };
+  const input = (id, value) => {
+    const field = document.getElementById(id); field.value = value;
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+    field.dispatchEvent(new Event('change', { bubbles: true }));
+  };
+  const click = id => document.getElementById(id).click();
+  try {
+    await wait(() => document.getElementById('resolution'));
+    assert(document.getElementById('projectName').value === 'Legacy draft', 'Legacy drafts must load');
+    assert(document.getElementById('resolution').options.length === 8, 'Resolution choices');
+    assert(!document.getElementById('projectType'), 'Old project-type field replaced');
+    for (const option of document.getElementById('resolution').options) {
+      input('resolution', option.value);
+      const [width, height] = option.value.match(/\d+/g).map(Number);
+      const canvas = document.querySelector('.resolution-canvas').getBoundingClientRect();
+      assert(canvas.width > 0 && canvas.height > 0 && Math.abs(canvas.width / canvas.height - width / height) < 0.001, 'Preview proportions match ' + option.value);
+      assert(document.querySelector('#resolutionPreview svg').getAttribute('aria-label').includes(`${width} by ${height}`), 'Accessible preview dimensions');
+    }
+    input('resolution', '1080 × 1920 px');
+    input('note', '<b>A custom note</b>');
+    input('font', 'My custom font');
+    assert(document.getElementById('paletteTemplatePanel').hidden, 'Palette templates start collapsed');
+    click('togglePaletteTemplates');
+    assert(!document.getElementById('paletteTemplatePanel').hidden, 'Chevron expands templates');
+    const templates = [...document.querySelectorAll('[data-palette-template]')];
+    assert(templates.length === 18, 'Ready-made palette choices');
+    for (const template of templates) {
+      template.click();
+      assert(window.testDraft.palette.length === 5, 'Template replaces palette with five saved colors');
+      assert(template.getAttribute('aria-pressed') === 'true', 'Selected template is indicated');
+      assert(document.querySelectorAll('.palette-selected-strip > span').length === 5, 'Selected palette strip shown');
+    }
+    templates[0].click();
+    assert(window.testDraft.palette[0] === '#1D355F', 'Blue palette available');
+    click('togglePaletteTemplates');
+    assert(document.getElementById('paletteTemplatePanel').hidden && document.getElementById('togglePaletteTemplates').getAttribute('aria-expanded') === 'false', 'Chevron collapses templates');
+    assert(document.querySelector('.palette-selected-strip').getBoundingClientRect().height > 0, 'Selected palette stays visible when collapsed');
+    document.querySelector('[data-go="4"]').click();
+    assert(document.querySelectorAll('.palette-selected-strip > span').length === 5, 'Template appears in review');
+    document.querySelector('[data-go="1"]').click();
+    assert(document.querySelector('[data-palette-template="0"]').getAttribute('aria-pressed') === 'true', 'Template selection survives navigation');
+    assert(document.getElementById('paletteTemplatePanel').hidden, 'Collapsed state survives navigation');
+    document.querySelector('[data-remove-color]').click();
+    assert(!document.querySelector('[data-palette-template][aria-pressed="true"]'), 'Customizing a template updates selection');
+    click('clearPalette');
+    assert(window.testDraft.palette.length === 0, 'Template can be cleared');
+    input('paletteColor', '#123abc'); click('addColor'); click('addColor');
+    assert(window.testDraft.palette.length === 1, 'Duplicate colors prevented');
+    input('paletteColor', '#ffeedd'); click('addColor');
+    document.querySelector('[data-remove-color="#123ABC"]').click();
+    assert(window.testDraft.palette.join() === '#FFEEDD', 'Color removal saved');
+    const data = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jA3sAAAAASUVORK5CYII='), c => c.charCodeAt(0));
+    const transfer = new DataTransfer();
+    transfer.items.add(new File([data], 'reference.png', { type: 'image/png' }));
+    transfer.items.add(new File([data], 'palette.png', { type: 'image/png' }));
+    document.getElementById('file').files = transfer.files;
+    document.getElementById('file').dispatchEvent(new Event('change'));
+    await wait(() => document.querySelectorAll('.reference-item').length === 2);
+    assert(window.testDraft.note === '<b>A custom note</b>', 'Image upload preserves text');
+    document.querySelector('[data-remove-reference]').click();
+    assert(window.testDraft.references.length === 1, 'Image removal saved');
+    click('nextButton'); click('nextButton');
+    assert(document.querySelectorAll('.reference-item').length === 1, 'References shared between steps');
+    click('nextButton');
+    assert(document.getElementById('app').textContent.includes('My custom font'), 'Font shown in review');
+    assert(document.getElementById('app').textContent.includes('1080 × 1920 px'), 'Resolution shown in review');
+    assert(document.getElementById('app').innerHTML.includes('&lt;b&gt;A custom note&lt;/b&gt;'), 'Notes escaped');
+    document.querySelector('[data-go="1"]').click();
+    assert(document.getElementById('font').value === 'My custom font', 'Preferences survive step navigation');
+    assert(document.querySelector('.resolution-shape').textContent.includes('Portrait'), 'Saved resolution restores preview');
+    document.querySelector('[data-go="4"]').click(); click('nextButton');
+    await wait(() => document.getElementById('newBrief'));
+    const submitted = window.testRequests.find(request => request.url === 'submit-brief.php').payload.brief;
+    assert(submitted.note === '<b>A custom note</b>' && submitted.font === 'My custom font' && submitted.resolution === '1080 × 1920 px', 'All text preferences submitted');
+    assert(submitted.palette.join() === '#FFEEDD' && submitted.references.length === 1, 'Palette and image submitted');
+    click('newBrief');
+    assert(window.testDraft.font === '' && window.testDraft.note === '' && window.testDraft.palette.length === 0 && window.testDraft.references.length === 0, 'New brief clears preferences');
+    document.getElementById('results').textContent = 'PASS: legacy draft, resolution, note, custom font, palette, image upload/removal, navigation, review escaping, submission payload, and reset.';
+  } catch (error) { document.getElementById('results').textContent = 'FAIL: ' + error.stack; }
+})();
+</script>
+</html>

@@ -63,6 +63,7 @@ module.exports = async function checkArtistWorkspace({ owner, other, artist, ano
   assert.ok(detail.includes('&lt;img src=x onerror=alert(1)&gt;.png'));
   assert.doesNotMatch(detail, /<script>alert\(1\)<\/script>/);
   for (const value of ['Music fans', 'Sell tickets', 'Hand-crafted', 'Warm &amp; rich', 'Editorial']) assert.ok(detail.includes(value));
+  for (const value of ['1920 × 1080 px', '&lt;b&gt;Keep the logo clear&lt;/b&gt;', 'My custom font &lt;test&gt;', '#123ABC, #F0E1D2']) assert.ok(detail.includes(value), value);
   for (const invalid of ['?id=invalid', '?id[]=' + submissionId, '?id=' + id()]) {
     assert.equal((await artist.request(route + invalid)).status, 404);
   }

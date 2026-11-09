@@ -48,7 +48,7 @@ Google verifies identity through the PHP OAuth callback. Application accounts re
    | `GOOGLE_CLIENT_SECRET` | Client secret from Google; mark Sensitive |
    | `GOOGLE_REDIRECT_URI` | `https://capstone-smoky-theta.vercel.app/auth/google-callback.php` |
 
-5. Push the code changes and deploy with those variables. Open the production homepage, choose **Client** or **Artist**, then **Continue with Google**. Google accounts that are new to this app are created in the chosen role. Existing Google accounts must sign in with their original role. The app does not grant admin access through Google.
+5. Push the code changes and deploy with those variables. Open the production homepage, choose **Client**, **Artist**, or **Admin**, then **Continue with Google**. New client and artist Google accounts are created in the chosen role. Admin access requires an email on `ADMIN_ALLOWED_EMAILS`.
 
 Accounts already registered with a password must continue using their password. Matching emails are never automatically linked; linking an existing password account would require a separate authenticated flow. For the first Google login, use a Google account that has not already been registered with a password in this app.
 

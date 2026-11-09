@@ -70,11 +70,12 @@ function sources(dir = root) {
     run('Project workflow', process.execPath, ['tests/workflow.cjs']);
     run('MySQL sessions', php, ['tests/mysql-session.php']);
     run('Sketchpad', process.execPath, ['tests/run-sketchpad.cjs', ...(process.env.CHROMIUM_BINARY ? [process.env.CHROMIUM_BINARY] : [])]);
+    run('Brief preferences', process.execPath, ['tests/run-sketchpad.cjs', process.env.CHROMIUM_BINARY || 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', 'brief-preferences.html']);
     run('Loading screen', process.execPath, ['tests/loading-screen.cjs']);
   } finally {
     if (server && server.exitCode === null) { const stopped = once(server, 'exit'); server.kill(); await stopped; }
     if (created) fixture("$p->exec('DROP DATABASE '.$name);");
   }
   if (failures.length) { console.error('\nFAILED: ' + failures.join(', ')); process.exitCode = 1; }
-  else console.log('\nPASS: all syntax checks and 11 regression suites. Temporary test database removed.');
+  else console.log('\nPASS: all syntax checks and 12 regression suites. Temporary test database removed.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

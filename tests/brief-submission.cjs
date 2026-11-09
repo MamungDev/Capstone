@@ -43,6 +43,7 @@ async function signup(index, role) {
     const anonymous = session();
     const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jA3sAAAAASUVORK5CYII=', 'base64');
     const brief = { accessCode: id(), projectName: '<script>alert(1)</script> Midnight', projectType: 'Poster',
+      resolution: '1920 × 1080 px', note: '<b>Keep the logo clear</b>', font: 'My custom font <test>', palette: ['#123ABC', '#F0E1D2'],
       idea: 'A warm jazz poster.\nA second line.', audience: 'Music fans', goal: 'Sell tickets',
       format: 'Poster \u00b7 4:5', style: 'Hand-crafted', energy: 'Warm & rich', tags: ['Warm', 'Editorial'],
       referenceName: '<img src=x onerror=alert(1)>.png', reference: 'data:image/png;base64,' + png.toString('base64'), sketch: null };
@@ -56,6 +57,9 @@ async function signup(index, role) {
     assert.equal((await submit({ ...payload, brief: { ...brief, idea: '' } })).status, 422);
     assert.equal((await submit({ ...payload, brief: { ...brief, projectName: 'x'.repeat(121) } })).status, 422);
     assert.equal((await submit({ ...payload, brief: { ...brief, tags: ['Unknown'] } })).status, 422);
+    for (const invalid of [{ resolution: 'Poster' }, { palette: ['red'] }, { palette: ['#123456; color:red'] }, { palette: Array(9).fill('#123456') }, { palette: 'blue' }, { note: 'x'.repeat(2001) }, { font: 'x'.repeat(121) }]) {
+      assert.equal((await submit({ ...payload, brief: { ...brief, ...invalid } })).status, 422);
+    }
     assert.equal((await submit({ ...payload, brief: { ...brief, reference: 'data:image/png;base64,SGVsbG8=' } })).status, 422);
     assert.equal((await submit({ ...payload, brief: { ...brief, reference: 'data:image/svg+xml;base64,PHN2Zz4=' } })).status, 422);
     assert.equal((await submit({ ...payload, brief: { ...brief, reference: 'x'.repeat(7 * 1024 * 1024) } })).status, 413);
@@ -71,6 +75,7 @@ async function signup(index, role) {
     assert.ok(html.includes('&lt;script&gt;alert(1)&lt;/script&gt; Midnight'));
     assert.ok(!html.includes('<script>alert(1)</script>'));
     assert.ok(html.includes('&lt;img src=x onerror=alert(1)&gt;.png'));
+    for (const value of ['1920 × 1080 px', '&lt;b&gt;Keep the logo clear&lt;/b&gt;', 'My custom font &lt;test&gt;', '#123ABC, #F0E1D2']) assert.ok(html.includes(value), value);
     assert.equal((await other.request('Client/submitted.php?id=' + submissionId)).status, 404);
     assert.equal((await artist.request('Client/submitted.php?id=' + submissionId)).status, 302);
     assert.equal((await anonymous.request('Client/submitted.php?id=' + submissionId)).status, 302);
