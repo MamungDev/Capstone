@@ -1,7 +1,7 @@
 // Included by brief-submission.cjs, which owns and cleans up all temporary accounts.
 const assert = require('node:assert/strict');
 
-module.exports = async function checkArtistWorkspace({ owner, other, artist, anonymous, brief, png, submissionId, suffix, id, base, emails, password }) {
+module.exports = async function checkArtistWorkspace({ owner, other, artist, anonymous, brief, png, pdfBytes, submissionId, suffix, id, base, emails, password }) {
   const route = 'Artist/Artist%20UI.php';
   const imageRoute = 'Artist/brief-image.php?id=';
   const unescapeUrl = value => value.replaceAll('&amp;', '&');
@@ -40,6 +40,8 @@ module.exports = async function checkArtistWorkspace({ owner, other, artist, ano
   assert.equal(signedIn.redirect, route);
   // A signed-in artist must unlock the owner's private brief first.
   assert.equal((await artist.request(route + '?id=' + submissionId)).status, 404);
+  assert.equal((await artist.request('Artist/brief-font.php?id=' + submissionId)).status, 404);
+  assert.equal((await artist.request('Artist/brief-document.php?id=' + submissionId)).status, 404);
   const ownerPage = await (await owner.request('Client/submitted.php?id=' + submissionId)).text();
   const accessCode = ownerPage.match(/aria-label="Private project code" readonly value="([a-f0-9]+)"/)[1];
   const unlocked = await fetch(base + route, { method: 'POST', redirect: 'manual',
@@ -64,6 +66,20 @@ module.exports = async function checkArtistWorkspace({ owner, other, artist, ano
   assert.doesNotMatch(detail, /<script>alert\(1\)<\/script>/);
   for (const value of ['Music fans', 'Sell tickets', 'Hand-crafted', 'Warm &amp; rich', 'Editorial']) assert.ok(detail.includes(value));
   for (const value of ['1920 × 1080 px', '&lt;b&gt;Keep the logo clear&lt;/b&gt;', 'My custom font &lt;test&gt;', '#123ABC, #F0E1D2']) assert.ok(detail.includes(value), value);
+  assert.ok(detail.includes('Script &lt;test&gt;.ttf'));
+  assert.ok(detail.includes('brief-font.php?id=' + submissionId));
+  assert.ok(detail.includes('Idea &lt;draft&gt;.pdf') && detail.includes('brief-document.php?id=' + submissionId));
+  assert.ok(!detail.includes('Idea <draft>.pdf'));
+  assert.equal((await other.request('Artist/brief-document.php?id=' + submissionId)).status, 403);
+  assert.equal((await anonymous.request('Artist/brief-document.php?id=' + submissionId)).status, 401);
+  const artistDocument = await artist.request('Artist/brief-document.php?id=' + submissionId);
+  assert.equal(artistDocument.status, 200);
+  assert.deepEqual(Buffer.from(await artistDocument.arrayBuffer()), pdfBytes);
+  assert.equal((await other.request('Artist/brief-font.php?id=' + submissionId)).status, 403);
+  assert.equal((await anonymous.request('Artist/brief-font.php?id=' + submissionId)).status, 401);
+  const importedFont = await artist.request('Artist/brief-font.php?id=' + submissionId);
+  assert.equal(importedFont.status, 200);
+  assert.deepEqual(Buffer.from(await importedFont.arrayBuffer()), require('node:fs').readFileSync('C:/Windows/Fonts/FRSCRIPT.TTF'));
   for (const invalid of ['?id=invalid', '?id[]=' + submissionId, '?id=' + id()]) {
     assert.equal((await artist.request(route + invalid)).status, 404);
   }

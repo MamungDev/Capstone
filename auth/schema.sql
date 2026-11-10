@@ -66,6 +66,24 @@ CREATE TABLE IF NOT EXISTS client_brief_references (
   FOREIGN KEY (client_id) REFERENCES users (id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
+CREATE TABLE IF NOT EXISTS client_brief_fonts (
+  brief_id CHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  name VARCHAR(255) NOT NULL,
+  mime VARCHAR(40) NOT NULL,
+  font_data MEDIUMBLOB NOT NULL,
+  PRIMARY KEY (brief_id),
+  FOREIGN KEY (brief_id) REFERENCES client_briefs (id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS client_brief_documents (
+  brief_id CHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  name VARCHAR(255) NOT NULL,
+  mime VARCHAR(100) NOT NULL,
+  file_data MEDIUMBLOB NOT NULL,
+  PRIMARY KEY (brief_id),
+  FOREIGN KEY (brief_id) REFERENCES client_briefs (id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
 CREATE TABLE IF NOT EXISTS brief_access_codes (
   brief_id CHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
   access_code CHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,

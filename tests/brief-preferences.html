@@ -3,6 +3,7 @@
 <meta charset="utf-8">
 <title>Brief preference regression</title>
 <link rel="stylesheet" href="../Client/client.css">
+<link id="fontSampleStylesheet" rel="stylesheet" href="data:text/css," media="print">
 <div class="shell">
   <button id="reset">Reset</button><button id="logout">Log out</button>
   <span id="saved"></span><div id="progress"></div>
@@ -45,19 +46,129 @@ window.fetch = async (url, options) => {
   const click = id => document.getElementById(id).click();
   try {
     await wait(() => document.getElementById('resolution'));
-    assert(document.getElementById('projectName').value === 'Legacy draft', 'Legacy drafts must load');
-    assert(document.getElementById('resolution').options.length === 8, 'Resolution choices');
+    assert(!document.getElementById('projectName') && document.getElementById('idea').value === 'Legacy idea', 'Description loads without a project-name field');
+    click('resolutionToggle');
+    const resolutionChoices = [...document.querySelectorAll('#resolutionOptions [role="option"]')].map(option => option.querySelector('span').textContent);
+    assert(resolutionChoices.length === 8, 'Resolution presets remain available');
     assert(!document.getElementById('projectType'), 'Old project-type field replaced');
-    for (const option of document.getElementById('resolution').options) {
-      input('resolution', option.value);
-      const [width, height] = option.value.match(/\d+/g).map(Number);
+    for (const value of resolutionChoices) {
+      input('resolution', value);
+      const [width, height] = value.match(/\d+/g).map(Number);
       const canvas = document.querySelector('.resolution-canvas').getBoundingClientRect();
-      assert(canvas.width > 0 && canvas.height > 0 && Math.abs(canvas.width / canvas.height - width / height) < 0.001, 'Preview proportions match ' + option.value);
+      assert(canvas.width > 0 && canvas.height > 0 && Math.abs(canvas.width / canvas.height - width / height) < 0.001, 'Preview proportions match ' + value);
       assert(document.querySelector('#resolutionPreview svg').getAttribute('aria-label').includes(`${width} by ${height}`), 'Accessible preview dimensions');
     }
-    input('resolution', '1080 × 1920 px');
+    input('resolution', '1280');
+    assert(document.querySelectorAll('#resolutionOptions [role="option"]').length === 1, 'Typing filters preset sizes');
+    const resolutionKey = key => document.getElementById('resolution').dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+    resolutionKey('ArrowDown'); resolutionKey('Enter');
+    assert(document.getElementById('resolution').value === '1280 × 720 px' && document.getElementById('resolutionOptions').hidden, 'Keyboard selects a filtered preset');
+    click('resolutionToggle');
+    document.querySelector('#resolutionOptions [role="option"]:last-child').click();
+    assert(window.testDraft.resolution === '2480 × 3508 px', 'Pointer selects a preset');
+    for (const invalid of ['', '1377 x', '0 x 1080', '-10 x 200', '1.5 x 200', '1000001 x 200', '200 x 300 extra']) {
+      input('resolution', invalid);
+      assert(!document.querySelector('#resolutionPreview svg') && document.querySelector('.resolution-empty'), 'Invalid or incomplete sizes show guidance: ' + invalid);
+    }
+    click('nextButton');
+    assert(document.activeElement.id === 'resolution' && document.getElementById('resolution').getAttribute('aria-invalid') === 'true', 'Invalid size prevents continuation and focuses the field');
+    document.querySelector('[data-go="4"]').click(); click('nextButton');
+    assert(document.getElementById('resolution') && window.testRequests.length === 0, 'Review submission also rejects invalid dimensions');
+    const resolutionField = document.getElementById('resolution');
+    resolutionField.value = '1377 x 2111';
+    resolutionField.dispatchEvent(new Event('input', { bubbles: true }));
+    assert(resolutionField.value === '1377 x 2111', 'Typing retains the text and caret format until committed');
+    const customCanvas = document.querySelector('.resolution-canvas').getBoundingClientRect();
+    assert(Math.abs(customCanvas.width / customCanvas.height - 1377 / 2111) < 0.001, 'Custom size previews immediately at the exact aspect ratio');
+    assert(document.querySelector('#resolutionOptions').textContent.includes('Custom size'), 'Custom dimensions can be selected from the dropdown');
+    resolutionKey('Escape');
+    assert(document.getElementById('resolutionOptions').hidden && resolutionField.value === '1377 x 2111', 'Escape closes suggestions without losing the typed size');
+    input('resolution', '1 x 1000000');
+    assert(document.querySelector('#resolutionPreview svg').getAttribute('aria-label').includes('1 by 1000000'), 'Very narrow custom dimensions remain valid');
+    input('resolution', '01377px BY 02111 PX');
+    assert(window.testDraft.resolution === '1377 × 2111 px', 'Custom formats normalize to pixel dimensions');
+    click('nextButton');
+    assert(document.querySelector('.brief-preferences'), 'A custom resolution allows continuing');
+    document.querySelector('[data-go="1"]').click();
+    assert(document.getElementById('resolution').value === '1377 × 2111 px', 'Custom dimensions survive step navigation');
+    input('idea', ''); click('nextButton');
+    assert(document.getElementById('idea') && document.activeElement.id === 'idea', 'An empty idea needs text or a document');
+    const ideaDocument = new File(['%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF\n'], 'Brief <draft>.pdf', { type: 'application/pdf' });
+    const ideaFiles = new DataTransfer(); ideaFiles.items.add(ideaDocument);
+    document.getElementById('ideaFileInput').files = ideaFiles.files;
+    document.getElementById('ideaFileInput').dispatchEvent(new Event('change'));
+    await wait(() => window.testDraft.ideaFile?.name === 'Brief <draft>.pdf');
+    assert(!document.getElementById('ideaFileSelected').hidden, 'Attached document is visible and saved in the draft');
+    click('nextButton');
+    assert(document.querySelector('.brief-preferences'), 'A document alone can describe the idea');
+    document.querySelector('[data-go="1"]').click();
+    assert(document.getElementById('ideaFileName').textContent === 'Brief <draft>.pdf', 'Attached document survives navigation');
+    click('removeIdeaFile');
+    assert(window.testDraft.ideaFile === null && document.getElementById('ideaFileSelected').hidden, 'Document can be removed');
+    const ideaFilesAgain = new DataTransfer(); ideaFilesAgain.items.add(ideaDocument);
+    document.getElementById('ideaFileInput').files = ideaFilesAgain.files;
+    document.getElementById('ideaFileInput').dispatchEvent(new Event('change'));
+    await wait(() => window.testDraft.ideaFile?.name === 'Brief <draft>.pdf');
+    input('idea', 'Legacy idea');
     input('note', '<b>A custom note</b>');
+    assert(!document.querySelector('.brief-preferences') && !document.getElementById('fontPicker'), 'Step 1 contains only the project description');
+    click('nextButton');
+    assert(document.querySelector('.brief-preferences')?.textContent.includes('Make it your own'), 'Palette and font are together in step 2');
+    assert(!document.querySelector('#file') && !document.querySelector('#upload') && !document.getElementById('app').textContent.includes('Reference images'), 'Reference upload is absent from step 2');
+    assert(!document.getElementById('format') && !document.getElementById('style') && !document.getElementById('energy') && !document.getElementById('app').textContent.includes('Quick reminder'), 'Creative settings and reminder are removed');
+    assert(!document.querySelector('[data-tag]') && !document.getElementById('app').textContent.includes('Choose a few keywords'), 'Keyword chooser is removed from step 2');
+    assert(!document.getElementById('fontSuggestions'), 'Native font-name list replaced');
+    assert(document.getElementById('fontPickerPanel').hidden, 'Font picker starts closed');
+    const fontCards = [...document.querySelectorAll('[data-font-choice]')];
+    assert(fontCards.length === 25, 'Expanded font sample cards');
+    assert(document.getElementById('fontSampleStylesheet').media === 'print', 'Additional font stylesheet waits until needed');
+    click('fontPickerToggle');
+    assert(document.getElementById('fontSampleStylesheet').media === 'all', 'Opening chooser activates font samples');
+    input('fontSearch', 'handwriting');
+    assert(fontCards.filter(card => !card.hidden).length === 2, 'Style search filters handwriting fonts');
+    input('fontSearch', 'zz-no-match');
+    assert(!document.getElementById('fontNoResults').hidden, 'Empty search has guidance');
+    click('fontPickerToggle');
+    for (const card of fontCards) {
+      click('fontPickerToggle');
+      assert(!document.getElementById('fontPickerPanel').hidden, 'Font dropdown opens');
+      assert(fontCards.every(option => !option.hidden), 'Opening chooser resets search');
+      card.click();
+      const name = card.querySelector('.font-option-name').textContent;
+      assert(window.testDraft.font === name, 'Selected font saved: ' + name);
+      assert(document.getElementById('fontPickerPanel').hidden, 'Selection closes dropdown');
+      assert(card.getAttribute('aria-pressed') === 'true', 'Selected font highlighted');
+      assert(document.getElementById('fontPreviewSample').style.fontFamily === card.querySelector('.font-option-sample').style.fontFamily, 'Selected preview uses the font sample family');
+      assert(document.activeElement.id === 'fontPickerToggle', 'Selection restores keyboard focus');
+    }
+    click('fontPickerToggle'); click('clearFont');
+    assert(window.testDraft.font === '' && document.getElementById('fontPreview').hidden, 'No preference clears font');
+    click('fontPickerToggle');
+    document.getElementById('font').focus();
+    document.getElementById('font').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    assert(document.getElementById('fontPickerPanel').hidden && document.activeElement.id === 'fontPickerToggle', 'Escape closes dropdown and restores focus');
+    click('fontPickerToggle');
+    document.getElementById('togglePaletteTemplates').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    assert(document.getElementById('fontPickerPanel').hidden, 'Outside click dismisses dropdown');
+    click('fontPickerToggle');
     input('font', 'My custom font');
+    assert(document.getElementById('fontPreviewSample').textContent.includes('Preview unavailable'), 'Custom font is not presented as an accurate preview');
+    click('fontPickerToggle');
+    const OriginalFontFace = window.FontFace;
+    window.FontFace = class { constructor(family) { this.family = family; } async load() { return this; } };
+    document.fonts.add = () => document.fonts;
+    document.fonts.delete = () => true;
+    const fontBytes = new Uint8Array(64);
+    fontBytes.set([0, 1, 0, 0]);
+    const fontFiles = new DataTransfer();
+    fontFiles.items.add(new File([fontBytes], 'my-font.ttf', { type: 'font/ttf' }));
+    document.getElementById('fontFileInput').files = fontFiles.files;
+    document.getElementById('fontFileInput').dispatchEvent(new Event('change'));
+    await wait(() => window.testDraft.fontFile?.name === 'my-font.ttf');
+    assert(window.testDraft.font === 'my font', 'Import sets preferred font name');
+    assert(!document.getElementById('fontImported').hidden, 'Imported file is visible');
+    assert(document.getElementById('fontPreviewSample').style.fontFamily.includes('ImportedBriefFont'), 'Imported font has a live preview');
+    window.FontFace = OriginalFontFace;
     assert(document.getElementById('paletteTemplatePanel').hidden, 'Palette templates start collapsed');
     click('togglePaletteTemplates');
     assert(!document.getElementById('paletteTemplatePanel').hidden, 'Chevron expands templates');
@@ -76,7 +187,7 @@ window.fetch = async (url, options) => {
     assert(document.querySelector('.palette-selected-strip').getBoundingClientRect().height > 0, 'Selected palette stays visible when collapsed');
     document.querySelector('[data-go="4"]').click();
     assert(document.querySelectorAll('.palette-selected-strip > span').length === 5, 'Template appears in review');
-    document.querySelector('[data-go="1"]').click();
+    document.querySelector('[data-go="2"]').click();
     assert(document.querySelector('[data-palette-template="0"]').getAttribute('aria-pressed') === 'true', 'Template selection survives navigation');
     assert(document.getElementById('paletteTemplatePanel').hidden, 'Collapsed state survives navigation');
     document.querySelector('[data-remove-color]').click();
@@ -88,6 +199,8 @@ window.fetch = async (url, options) => {
     input('paletteColor', '#ffeedd'); click('addColor');
     document.querySelector('[data-remove-color="#123ABC"]').click();
     assert(window.testDraft.palette.join() === '#FFEEDD', 'Color removal saved');
+    click('nextButton');
+    assert(document.querySelector('#file') && document.querySelector('#upload'), 'Images can be uploaded in the References step');
     const data = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jA3sAAAAASUVORK5CYII='), c => c.charCodeAt(0));
     const transfer = new DataTransfer();
     transfer.items.add(new File([data], 'reference.png', { type: 'image/png' }));
@@ -98,22 +211,29 @@ window.fetch = async (url, options) => {
     assert(window.testDraft.note === '<b>A custom note</b>', 'Image upload preserves text');
     document.querySelector('[data-remove-reference]').click();
     assert(window.testDraft.references.length === 1, 'Image removal saved');
-    click('nextButton'); click('nextButton');
-    assert(document.querySelectorAll('.reference-item').length === 1, 'References shared between steps');
+    assert(document.querySelectorAll('.reference-item').length === 1, 'Remaining reference stays visible in the References step');
     click('nextButton');
-    assert(document.getElementById('app').textContent.includes('My custom font'), 'Font shown in review');
-    assert(document.getElementById('app').textContent.includes('1080 × 1920 px'), 'Resolution shown in review');
+    assert(document.getElementById('app').textContent.includes('my font'), 'Imported font shown in review');
+    assert(!document.getElementById('app').textContent.includes('Direction'), 'Removed settings are absent from review');
+    assert(!document.getElementById('app').textContent.includes('Keywords'), 'Removed keywords are absent from review');
+    assert(document.getElementById('app').textContent.includes('1377 × 2111 px'), 'Custom resolution shown in review');
+    assert(document.getElementById('app').innerHTML.includes('Brief &lt;draft&gt;.pdf'), 'Document filename is escaped in review');
     assert(document.getElementById('app').innerHTML.includes('&lt;b&gt;A custom note&lt;/b&gt;'), 'Notes escaped');
+    document.querySelector('[data-go="2"]').click();
+    assert(document.getElementById('font').value === 'my font', 'Imported font survives step navigation');
     document.querySelector('[data-go="1"]').click();
-    assert(document.getElementById('font').value === 'My custom font', 'Preferences survive step navigation');
     assert(document.querySelector('.resolution-shape').textContent.includes('Portrait'), 'Saved resolution restores preview');
     document.querySelector('[data-go="4"]').click(); click('nextButton');
     await wait(() => document.getElementById('newBrief'));
     const submitted = window.testRequests.find(request => request.url === 'submit-brief.php').payload.brief;
-    assert(submitted.note === '<b>A custom note</b>' && submitted.font === 'My custom font' && submitted.resolution === '1080 × 1920 px', 'All text preferences submitted');
+    assert(submitted.note === '<b>A custom note</b>' && submitted.font === 'my font' && submitted.resolution === '1377 × 2111 px', 'All text preferences including custom dimensions submitted');
+    assert(!('format' in submitted) && !('style' in submitted) && !('energy' in submitted), 'Removed settings are omitted from new submissions');
+    assert(!('tags' in submitted), 'Removed keywords are omitted from new submissions');
+    assert(submitted.ideaFile?.name === 'Brief <draft>.pdf' && submitted.ideaFile.data.startsWith('data:application/pdf;base64,'), 'Idea document included in submission');
+    assert(submitted.fontFile?.name === 'my-font.ttf' && submitted.fontFile.data.startsWith('data:font/ttf;base64,'), 'Imported font included in submission');
     assert(submitted.palette.join() === '#FFEEDD' && submitted.references.length === 1, 'Palette and image submitted');
     click('newBrief');
-    assert(window.testDraft.font === '' && window.testDraft.note === '' && window.testDraft.palette.length === 0 && window.testDraft.references.length === 0, 'New brief clears preferences');
+    assert(window.testDraft.font === '' && window.testDraft.fontFile === null && window.testDraft.ideaFile === null && window.testDraft.note === '' && window.testDraft.palette.length === 0 && window.testDraft.references.length === 0, 'New brief clears preferences and attachment');
     document.getElementById('results').textContent = 'PASS: legacy draft, resolution, note, custom font, palette, image upload/removal, navigation, review escaping, submission payload, and reset.';
   } catch (error) { document.getElementById('results').textContent = 'FAIL: ' + error.stack; }
 })();

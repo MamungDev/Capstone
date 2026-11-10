@@ -15,7 +15,8 @@ $client = require_client_auth();
     <link rel="icon" href="../assets/mamungkun-icon.svg" type="image/svg+xml">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&amp;family=Manrope:wght@400;600;700;800&amp;family=Playfair+Display:ital,wght@0,600;0,700;1,600&amp;display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&amp;family=Manrope:wght@400;600;700;800&amp;family=Montserrat:wght@400&amp;family=Playfair+Display:ital,wght@0,600;0,700;1,600&amp;family=Poppins:wght@400&amp;family=Roboto:wght@400&amp;display=swap" rel="stylesheet">
+    <link id="fontSampleStylesheet" href="https://fonts.googleapis.com/css2?family=Abril+Fatface&amp;family=Bebas+Neue&amp;family=Caveat:wght@400&amp;family=Cinzel:wght@400&amp;family=Cormorant+Garamond:wght@400&amp;family=Fredoka:wght@400&amp;family=Inter:wght@400&amp;family=Lato:wght@400&amp;family=Libre+Baskerville:wght@400&amp;family=Lora:wght@400&amp;family=Merriweather:wght@400&amp;family=Nunito+Sans:wght@400&amp;family=Oswald:wght@400&amp;family=Pacifico&amp;family=Raleway:wght@400&amp;family=Space+Mono:wght@400&amp;display=swap" rel="stylesheet" media="print">
     <link rel="stylesheet" href="client.css?v=<?= filemtime(__DIR__ . '/client.css') ?>">
     <script>window.CLIENT_SESSION = <?= json_encode([
         'csrf' => csrf_token(),

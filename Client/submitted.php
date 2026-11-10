@@ -79,19 +79,24 @@ try {
         <section class="review">
             <div class="card">
                 <div class="summary"><strong>Private project code</strong><input aria-label="Private project code" readonly value="<?= html($accessCode) ?>" onclick="this.select()"><p class="subtle">Share this code only with your chosen artist. They must enter it in their inbox to receive this brief and its references.</p></div>
-                <?php foreach ([
+                <?php foreach (array_merge([
                     (($details['resolution'] ?? '') !== '' ? 'Resolution size' : 'Project type') => ($details['resolution'] ?? '') ?: $details['projectType'],
-                    'Idea' => $details['idea'],
+                    'Idea' => $details['idea'] ?: (!empty($details['ideaFileName']) ? 'Provided in the attached document' : ''),
                     'Additional note' => ($details['note'] ?? '') ?: 'Not specified',
                     'Preferred font' => ($details['font'] ?? '') ?: 'No preference',
+                    'Imported font file' => ($details['fontFileName'] ?? '') ?: 'None',
                     'Preferred color palette' => implode(', ', $details['palette'] ?? []) ?: 'No preference',
-                    'Audience' => $details['audience'] ?: 'Not specified',
-                    'Goal' => $details['goal'] ?: 'Not specified',
-                    'Direction' => implode(' · ', [$details['style'], $details['energy'], $details['format']]),
-                    'Keywords' => implode(', ', $details['tags']) ?: 'No keywords selected',
-                ] as $label => $value): ?>
+                ], array_filter([
+                    'Audience' => $details['audience'] ?? '',
+                    'Goal' => $details['goal'] ?? '',
+                    'Direction' => implode(' · ', array_filter([$details['style'] ?? '', $details['energy'] ?? '', $details['format'] ?? ''], static fn ($value) => $value !== '')),
+                ], static fn ($value) => $value !== ''), !empty($details['tags']) ? [
+                    'Keywords' => implode(', ', $details['tags']),
+                ] : []) as $label => $value): ?>
                     <div class="summary"><strong><?= html($label) ?></strong><div><?= html($value) ?></div></div>
                 <?php endforeach; ?>
+                <?php if (!empty($details['fontFileName'])): ?><div class="summary"><strong>Font attachment</strong><div><a class="small" href="brief-font.php?id=<?= html($brief['id']) ?>">Download <?= html($details['fontFileName']) ?></a></div></div><?php endif; ?>
+                <?php if (!empty($details['ideaFileName'])): ?><div class="summary"><strong>Idea document</strong><div><a class="small" href="brief-document.php?id=<?= html($brief['id']) ?>">Download <?= html($details['ideaFileName']) ?></a></div></div><?php endif; ?>
             </div>
             <div class="card">
                 <h2>Visual references (<?= count($references) ?>)</h2>

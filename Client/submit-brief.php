@@ -9,8 +9,8 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 $client = current_user();
 if (!$client) json_response(['error' => 'Sign in again to submit. Your draft is still in this browser.'], 401);
 if ($client['role'] !== 'client') json_response(['error' => 'Only clients can submit briefs.'], 403);
-$limit = 7 * 1024 * 1024;
-if ((int) ($_SERVER['CONTENT_LENGTH'] ?? 0) > $limit) json_response(['error' => 'This brief is too large. Use a smaller image.'], 413);
+$limit = 16 * 1024 * 1024;
+if ((int) ($_SERVER['CONTENT_LENGTH'] ?? 0) > $limit) json_response(['error' => 'This brief is too large. Use a smaller attachment.'], 413);
 $raw = file_get_contents('php://input', false, null, 0, $limit + 1);
 if ($raw === false || strlen($raw) > $limit) json_response(['error' => 'This brief is too large.'], 413);
 $input = json_decode($raw, true);
@@ -33,9 +33,12 @@ foreach (['projectName' => 120, 'projectType' => 80, 'idea' => 5000, 'audience' 
     if (!is_string($value) || mb_strlen($value) > $max) json_response(['error' => "$field must be text of at most $max characters."], 422);
     $details[$field] = trim($value);
 }
-if ($details['projectName'] === '' || $details['idea'] === '') json_response(['error' => 'Add a project name and description.'], 422);
-if ($details['resolution'] !== '' && !in_array($details['resolution'], ['1920 × 1080 px', '1280 × 720 px', '2560 × 1440 px', '3840 × 2160 px', '1080 × 1080 px', '1080 × 1350 px', '1080 × 1920 px', '2480 × 3508 px'], true)) {
-    json_response(['error' => 'Choose a resolution size from the available options.'], 422);
+if ($details['resolution'] !== '') {
+    if (!preg_match('/^\s*([0-9]{1,7})\s*(?:px)?\s*(?:x|×|by)\s*([0-9]{1,7})\s*(?:px)?\s*$/iuD', $details['resolution'], $dimensions)
+        || (int) $dimensions[1] < 1 || (int) $dimensions[2] < 1 || (int) $dimensions[1] > 1000000 || (int) $dimensions[2] > 1000000) {
+        json_response(['error' => 'Enter width × height in whole pixels, from 1 to 1,000,000 per side (for example 1377 x 2111).'], 422);
+    }
+    $details['resolution'] = (int) $dimensions[1] . ' × ' . (int) $dimensions[2] . ' px';
 }
 $palette = $source['palette'] ?? [];
 if (!is_array($palette) || !array_is_list($palette) || count($palette) > 8) json_response(['error' => 'Choose up to eight palette colors.'], 422);
@@ -51,6 +54,26 @@ foreach ($tags as $tag) {
     }
 }
 $details['tags'] = array_values(array_unique($tags));
+try {
+    require_once __DIR__ . '/../auth/brief-fonts.php';
+    $fontFile = imported_brief_font($source['fontFile'] ?? null);
+} catch (InvalidArgumentException $error) {
+    json_response(['error' => $error->getMessage()], 422);
+}
+if ($fontFile !== null) $details['fontFileName'] = $fontFile['name'];
+try {
+    require_once __DIR__ . '/../auth/brief-documents.php';
+    $ideaFile = imported_brief_document($source['ideaFile'] ?? null);
+} catch (InvalidArgumentException $error) {
+    json_response(['error' => $error->getMessage()], 422);
+}
+if ($details['idea'] === '' && $ideaFile === null) json_response(['error' => 'Describe your idea or attach a DOCX or PDF file.'], 422);
+if ($ideaFile !== null) $details['ideaFileName'] = $ideaFile['name'];
+if ($details['projectName'] === '') {
+    $firstLine = preg_split('/\R/u', $details['idea'], 2)[0];
+    $title = $firstLine !== '' ? trim($firstLine) : preg_replace('/\.(docx|pdf)$/i', '', $ideaFile['name']);
+    $details['projectName'] = mb_substr($title, 0, 120);
+}
 $referenceIds = $source['references'] ?? null;
 if ($referenceIds !== null) {
     if (!is_array($referenceIds) || !array_is_list($referenceIds)) json_response(['error' => 'Invalid references.'], 422);
@@ -77,7 +100,9 @@ if ($visual !== null) {
     }
 }
 $json = json_encode($details, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
-$hash = hash('sha256', $json . "\0" . ($mime ?? '') . "\0" . ($bytes ?? '') . "\0" . $accessCode);
+$fontHashPart = $fontFile === null ? '' : "\0" . hash('sha256', $fontFile['bytes']);
+$documentHashPart = $ideaFile === null ? '' : "\0" . hash('sha256', $ideaFile['bytes']);
+$hash = hash('sha256', $json . "\0" . ($mime ?? '') . "\0" . ($bytes ?? '') . $fontHashPart . $documentHashPart . "\0" . $accessCode);
 try {
     require_once __DIR__ . '/../auth/brief-access.php';
     try {
@@ -98,13 +123,25 @@ try {
             $details['visualKind'] = $referenceIds ? $references[$referenceIds[0]]['kind'] : null;
             $mime = $referenceIds ? $references[$referenceIds[0]]['mime'] : null;
             $json = json_encode($details, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
-            $hash = hash('sha256', $json . "\0" . implode(',', array_map(static fn ($referenceId) => $referenceId . ':' . $references[$referenceId]['content_hash'], $referenceIds)) . "\0" . $accessCode);
+            $hash = hash('sha256', $json . "\0" . implode(',', array_map(static fn ($referenceId) => $referenceId . ':' . $references[$referenceId]['content_hash'], $referenceIds)) . $fontHashPart . $documentHashPart . "\0" . $accessCode);
         }
         $insertSql = db_driver() === 'pgsql'
             ? "INSERT INTO client_briefs (id, client_id, project_name, details_json, payload_hash, visual_mime, visual_data) VALUES (?, ?, ?, ?, ?, ?, decode(?, 'base64'))"
             : 'INSERT INTO client_briefs (id, client_id, project_name, details_json, payload_hash, visual_mime, visual_data) VALUES (?, ?, ?, ?, ?, ?, ?)';
         $insert = db()->prepare($insertSql);
         $insert->execute([$id, $client['id'], $details['projectName'], $json, $hash, $mime, db_driver() === 'pgsql' && $bytes !== null ? base64_encode($bytes) : $bytes]);
+        if ($fontFile !== null) {
+            $insertFont = db_driver() === 'pgsql'
+                ? "INSERT INTO client_brief_fonts (brief_id, name, mime, font_data) VALUES (?, ?, ?, decode(?, 'base64'))"
+                : 'INSERT INTO client_brief_fonts (brief_id, name, mime, font_data) VALUES (?, ?, ?, ?)';
+            db()->prepare($insertFont)->execute([$id, $fontFile['name'], $fontFile['mime'], db_driver() === 'pgsql' ? base64_encode($fontFile['bytes']) : $fontFile['bytes']]);
+        }
+        if ($ideaFile !== null) {
+            $insertDocument = db_driver() === 'pgsql'
+                ? "INSERT INTO client_brief_documents (brief_id, name, mime, file_data) VALUES (?, ?, ?, decode(?, 'base64'))"
+                : 'INSERT INTO client_brief_documents (brief_id, name, mime, file_data) VALUES (?, ?, ?, ?)';
+            db()->prepare($insertDocument)->execute([$id, $ideaFile['name'], $ideaFile['mime'], db_driver() === 'pgsql' ? base64_encode($ideaFile['bytes']) : $ideaFile['bytes']]);
+        }
         if ($referenceIds !== null) {
             $attach = db()->prepare('UPDATE client_brief_references SET brief_id = ?, position = ? WHERE id = ? AND client_id = ?');
             foreach ($referenceIds as $position => $referenceId) $attach->execute([$id, $position, $referenceId, $client['id']]);

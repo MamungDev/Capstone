@@ -291,7 +291,6 @@ frame.onload = async () => {
     $('.sketch-dialog').close();
     doc.querySelector('.sketch-dialog').remove(); doc.body.append(originalDialog);
     $('[data-go="1"]').click();
-    $('#projectName').value = 'Multiple references'; $('#projectName').dispatchEvent(new win.Event('input'));
     $('#idea').value = 'A project with images and sketches'; $('#idea').dispatchEvent(new win.Event('input'));
     $('[data-go="4"]').click();
     const requests = [];

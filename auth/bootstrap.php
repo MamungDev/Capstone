@@ -184,6 +184,8 @@ function ensure_database_schema(): void
         db()->query('SELECT 1 FROM users LIMIT 0');
         db()->query('SELECT 1 FROM client_briefs LIMIT 0');
         db()->query('SELECT 1 FROM client_brief_references LIMIT 0');
+        db()->query('SELECT 1 FROM client_brief_fonts LIMIT 0');
+        db()->query('SELECT 1 FROM client_brief_documents LIMIT 0');
         db()->query('SELECT 1 FROM brief_access_codes LIMIT 0');
         db()->query('SELECT 1 FROM brief_artist_access LIMIT 0');
         db()->query('SELECT 1 FROM brief_workflow LIMIT 0');

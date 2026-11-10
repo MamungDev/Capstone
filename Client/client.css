@@ -788,6 +788,23 @@ a:focus-visible, button:focus-visible { outline: 3px solid var(--blue); outline-
 .reference-collection { margin-top: 20px; }
 .brief-preferences { margin: 20px 0; }
 .brief-preferences > .subtle { margin-bottom: 22px; }
+.resolution-picker { position: relative; min-width: 0; }
+.resolution-control { position: relative; }
+.field .resolution-control input { padding: 12px 48px 12px 14px; min-height: 46px; font-weight: 600; }
+.resolution-control input[aria-expanded="true"] { border-color: #3158c9; box-shadow: 0 0 0 4px #e6edff; }
+.resolution-control input[aria-invalid="true"] { border-color: #b34242; }
+#resolutionToggle { position: absolute; top: 1px; right: 1px; bottom: 1px; display: grid; place-items: center; width: 44px; padding: 0; border: 0; border-radius: 0 9px 9px 0; color: #6f809f; background: transparent; }
+#resolutionToggle:hover { background: #f0f3fc; }
+#resolutionToggle[aria-expanded="true"] svg { transform: rotate(180deg); }
+.resolution-options { position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 40; max-height: min(300px, 45vh); overflow-y: auto; overscroll-behavior: contain; padding: 6px; border: 1px solid #d7dfef; border-radius: 12px; background: #fff; box-shadow: 0 12px 32px #1d2b4d24; font-size: 13px; font-weight: 400; }
+.resolution-options[hidden] { display: none; }
+.resolution-option { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border-radius: 7px; cursor: pointer; }
+.resolution-option[aria-selected="true"] { color: #3158c9; background: #f0f3fc; font-weight: 700; }
+.resolution-option.is-active, .resolution-option:hover { background: #e6edff; color: #2448b2; }
+.resolution-custom { flex-shrink: 0; font-size: 11px; color: #526380; }
+.resolution-help, .resolution-no-results, .resolution-empty { margin: 0; font-size: 12px; line-height: 1.6; font-weight: 400; color: #526380; }
+.resolution-no-results { padding: 10px 12px; }
+.resolution-empty { padding: 34px 12px; }
 .resolution-preview { margin: 4px 0 0; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: #f7f8fc; text-align: center; }
 .resolution-preview svg { display: block; width: 100%; max-width: 320px; height: auto; margin: 0 auto; }
 .resolution-canvas { fill: #fff; stroke: #879bc4; stroke-width: 1; }
@@ -820,9 +837,46 @@ a:focus-visible, button:focus-visible { outline: 3px solid var(--blue); outline-
 .palette-swatch { padding: 7px 10px; border: 1px solid var(--line); border-radius: 10px; font-size: 12px; }
 .palette-dot { width: 24px; height: 24px; border-radius: 50%; border: 1px solid #cbd6e6; }
 .palette-swatch button { padding: 2px 6px; background: transparent; border: 0; color: var(--ink); font-size: 20px; }
-.reference-upload { margin-top: 24px; flex-wrap: wrap; }
-.reference-upload h3 { margin: 0; }
-.reference-upload .small { flex-shrink: 0; }
+.font-picker-control { position: relative; min-width: 0; }
+#fontLabel { font-size: 14px; font-weight: 800; }
+.font-picker-toggle { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 56px; padding: 10px 14px; border: 1px solid #cbd6e6; border-radius: 10px; background: #fff; color: var(--ink); text-align: left; }
+.font-picker-toggle:hover { border-color: #879bc4; }
+.font-picker-toggle[aria-expanded="true"] { border-color: var(--blue); box-shadow: 0 0 0 4px #e6edff; }
+.font-trigger-sample { font-size: 26px; line-height: 1.2; font-weight: 400; }
+#fontPickerValue { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 14px; }
+.font-picker-toggle svg { flex: none; color: #7185a8; }
+.font-picker-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
+.font-picker-panel { position: absolute; top: calc(100% + 8px); left: 0; right: 0; z-index: 40; padding: 16px; max-height: min(460px, 60vh); overflow-y: auto; overscroll-behavior: contain; background: #fff; border: 1px solid #d7dfef; border-radius: 14px; box-shadow: 0 16px 40px rgba(27,47,86,.16); }
+.font-panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 14px; }
+.font-help { margin: 8px 0 14px; font-size: 12px; line-height: 1.6; color: #526380; }
+.font-search { width: 100%; margin-bottom: 14px; padding: 11px 13px; border: 1px solid #cbd6e6; border-radius: 9px; background: #fff; color: var(--ink); font: inherit; font-size: 13px; }
+.font-search:focus { outline: 0; border-color: var(--blue); box-shadow: 0 0 0 3px #e6edff; }
+.font-no-results { font-size: 12px; color: #526380; line-height: 1.6; }
+.font-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.font-option { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; padding: 16px 12px 12px; border: 1px solid #d7dfef; border-radius: 10px; background: #fff; color: var(--ink); text-align: left; }
+.font-option:hover { background: #f7f8fc; border-color: #879bc4; }
+.font-option[aria-pressed="true"] { background: #edf2ff; border-color: var(--blue); box-shadow: inset 0 0 0 1px var(--blue); }
+.font-option-sample { display: block; font-size: 30px; font-weight: 400; line-height: 1.4; margin-bottom: 12px; }
+.font-option-name { font-size: 12px; font-weight: 700; overflow-wrap: anywhere; }
+.font-option-type { font-size: 10px; font-weight: 400; color: #526380; margin-top: 4px; }
+.font-custom { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
+.font-import-actions, .font-imported { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.font-import-actions { margin-top: 2px; }
+.font-imported { justify-content: space-between; padding: 10px 12px; border: 1px solid #d7dfef; border-radius: 10px; background: #f7f8fc; font-size: 12px; overflow-wrap: anywhere; }
+.font-imported > span { min-width: 0; }
+.idea-file-actions, .idea-file-selected { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.idea-file-selected { justify-content: space-between; padding: 10px 12px; border: 1px solid #d7dfef; border-radius: 10px; background: #f7f8fc; font-size: 12px; overflow-wrap: anywhere; }
+.idea-file-selected > span { min-width: 0; }
+.font-preview { padding: 18px 20px; border: 1px solid var(--line); border-radius: 12px; background: #f7f8fc; overflow-wrap: anywhere; }
+.font-preview-label { font-size: 11px; font-weight: 700; color: #526380; }
+.font-preview-sample { margin: 12px 0; font-size: clamp(23px, 3vw, 32px); line-height: 1.4; font-weight: 400; }
+.font-preview-sample.is-custom { font-size: 13px; color: #526380; }
+.font-preview-alphabet { font-size: 16px; font-weight: 400; color: #526380; }
+@media (max-width: 520px) {
+  .font-picker-panel { padding: 12px; }
+  .font-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .font-option-sample { font-size: 27px; }
+}
 .reference-collection-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 12px; }
 .reference-collection-actions .small { white-space: nowrap; }
 .reference-gallery { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(210px, 100%), 1fr)); gap: 16px; }

@@ -34,9 +34,9 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
       const message = JSON.parse(event.data);
       if (waiting.has(message.id)) { waiting.get(message.id)(message); waiting.delete(message.id); }
     };
-    const evaluate = expression => new Promise(resolve => {
+    const evaluate = (expression, awaitPromise = false) => new Promise(resolve => {
       const id = ++sequence; waiting.set(id, resolve);
-      socket.send(JSON.stringify({id, method:'Runtime.evaluate', params:{expression, returnByValue:true}}));
+      socket.send(JSON.stringify({id, method:'Runtime.evaluate', params:{expression, returnByValue:true, awaitPromise}}));
     });
     let output = '';
     for (let i = 0; i < 200; i++) {
@@ -47,6 +47,12 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
     }
     console.log(output);
     if (!output.startsWith('PASS:')) process.exitCode = 1;
+    if (output.startsWith('PASS:') && process.argv[3] === 'brief-preferences.html') {
+      const fontData = readFileSync('C:/Windows/Fonts/FRSCRIPT.TTF').toString('base64');
+      const result = await evaluate(`(async () => { const face = new FontFace('ImportedTestFont', 'url(data:font/ttf;base64,${fontData})'); await face.load(); return face.status; })()`, true);
+      if (result.result?.result?.value !== 'loaded') throw new Error('A real TTF file did not load in the browser');
+      console.log('PASS: a real imported TTF loads in the browser.');
+    }
   } catch (error) { console.error(error.message); process.exitCode = 1; }
   finally {
     socket?.close();

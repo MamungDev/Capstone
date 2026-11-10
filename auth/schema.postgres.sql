@@ -54,6 +54,20 @@ CREATE TABLE IF NOT EXISTS client_brief_references (
 CREATE INDEX IF NOT EXISTS reference_brief_order ON client_brief_references (brief_id, position);
 CREATE INDEX IF NOT EXISTS reference_owner ON client_brief_references (client_id);
 
+CREATE TABLE IF NOT EXISTS client_brief_fonts (
+  brief_id CHAR(32) PRIMARY KEY REFERENCES client_briefs(id) ON DELETE CASCADE,
+  name VARCHAR(255) NOT NULL,
+  mime VARCHAR(40) NOT NULL,
+  font_data BYTEA NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS client_brief_documents (
+  brief_id CHAR(32) PRIMARY KEY REFERENCES client_briefs(id) ON DELETE CASCADE,
+  name VARCHAR(255) NOT NULL,
+  mime VARCHAR(100) NOT NULL,
+  file_data BYTEA NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS brief_access_codes (
   brief_id CHAR(32) PRIMARY KEY REFERENCES client_briefs(id) ON DELETE CASCADE,
   access_code CHAR(32) NOT NULL UNIQUE

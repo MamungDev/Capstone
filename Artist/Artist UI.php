@@ -160,15 +160,17 @@ try {
         <header class="detail-heading"><div><p class="eyebrow"><?= artist_html(($details['resolution'] ?? '') ?: ($details['projectType'] ?: 'Creative brief')) ?></p><h1><?= artist_html($brief['project_name']) ?></h1><p class="muted">Submitted <?= artist_html(submitted_date($brief['created_at'])) ?> &middot; <?= artist_html($brief['client_name']) ?></p></div><span class="status"><?= artist_html(workflow_labels()[workflow_read($brief['id'])['status']]) ?></span></header>
         <?php require __DIR__ . '/../auth/workflow-panel.php'; ?>
         <div class="detail-grid"><div>
-          <section class="card"><p class="section-label">01 / The idea</p><h2>The starting point</h2><p class="description"><?= artist_html($details['idea']) ?></p>
+          <section class="card"><p class="section-label">01 / The idea</p><h2>The starting point</h2><p class="description"><?= artist_html($details['idea'] ?: (!empty($details['ideaFileName']) ? 'The idea is in the attached document.' : '')) ?></p>
             <dl class="detail-fields">
+              <?php if (!empty($details['ideaFileName'])): ?><div><dt>Idea document</dt><dd><?= artist_html($details['ideaFileName']) ?><br><a class="small-button" href="brief-document.php?id=<?= artist_html($id) ?>">Download document &darr;</a></dd></div><?php endif; ?>
             <?php foreach (['Resolution size' => $details['resolution'] ?? '', 'Additional note' => $details['note'] ?? '', 'Preferred font' => $details['font'] ?? '', 'Preferred color palette' => implode(', ', $details['palette'] ?? [])] as $label => $value): ?>
               <div><dt><?= artist_html($label) ?></dt><dd><?= artist_html($value ?: 'Not specified') ?></dd></div>
             <?php endforeach; ?>
-            <?php foreach (['Audience' => $details['audience'], 'Goal' => $details['goal'], 'Format' => $details['format'], 'Visual style' => $details['style'], 'Colour energy' => $details['energy']] as $label => $value): ?>
-              <div><dt><?= artist_html($label) ?></dt><dd><?= artist_html($value ?: 'Not specified') ?></dd></div>
+              <?php if (!empty($details['fontFileName'])): ?><div><dt>Imported font file</dt><dd><?= artist_html($details['fontFileName']) ?><br><a class="small-button" href="brief-font.php?id=<?= artist_html($id) ?>">Download font &darr;</a></dd></div><?php endif; ?>
+            <?php foreach (array_filter(['Audience' => $details['audience'] ?? '', 'Goal' => $details['goal'] ?? '', 'Format' => $details['format'] ?? '', 'Visual style' => $details['style'] ?? '', 'Colour energy' => $details['energy'] ?? ''], static fn ($value) => $value !== '') as $label => $value): ?>
+              <div><dt><?= artist_html($label) ?></dt><dd><?= artist_html($value) ?></dd></div>
             <?php endforeach; ?>
-              <div><dt>Keywords</dt><dd><?php if ($details['tags']): ?><?php foreach ($details['tags'] as $tag): ?><span class="chip"><?= artist_html($tag) ?></span><?php endforeach; ?><?php else: ?>No keywords selected<?php endif; ?></dd></div>
+              <?php if (!empty($details['tags'])): ?><div><dt>Keywords</dt><dd><?php foreach ($details['tags'] as $tag): ?><span class="chip"><?= artist_html($tag) ?></span><?php endforeach; ?></dd></div><?php endif; ?>
             </dl>
           </section>
           <section class="card"><p class="section-label">02 / Visual direction</p><div class="card-heading"><h2>References & inspiration (<?= count($references) ?>)</h2></div>

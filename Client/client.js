@@ -3,9 +3,9 @@
   const storageKey = 'capstone-client-brief-v1:' + window.CLIENT_SESSION.id;
   const defaults = {
     flowVersion: 2, step: 1, submitted: false,
-    projectName: '', projectType: '', resolution: '1920 × 1080 px', idea: '', note: '', font: '', palette: [],
-    audience: '', goal: '', tags: [], format: 'Poster · 4:5',
-    style: 'Hand-crafted', energy: 'Warm & rich',
+    projectName: '', projectType: '', resolution: '1920 × 1080 px', idea: '', ideaFile: null, note: '', font: '', fontFile: null, palette: [],
+    audience: '', goal: '', tags: [], format: '',
+    style: '', energy: '',
     references: [],
     submissionId: null, pendingId: null, pendingSignature: null, accessCode: null
   };
@@ -27,9 +27,12 @@
     for (const key of ['projectName', 'projectType', 'resolution', 'idea', 'note', 'font', 'audience', 'goal', 'format', 'style', 'energy']) {
       if (typeof brief[key] !== 'string') brief[key] = defaults[key];
     }
-    brief.tags = Array.isArray(brief.tags) ? brief.tags.filter(tag => typeof tag === 'string') : [];
+    brief.tags = [];
     brief.palette = Array.isArray(brief.palette) ? [...new Set(brief.palette.filter(color => typeof color === 'string' && /^#[0-9a-f]{6}$/i.test(color)).map(color => color.toUpperCase()))].slice(0, 8) : [];
-    if (!resolutions.includes(brief.resolution)) brief.resolution = defaults.resolution;
+    brief.fontFile = brief.fontFile && typeof brief.fontFile.name === 'string' && /^[a-f0-9]{32}$/.test(brief.fontFile.id || '') && typeof brief.fontFile.data === 'string' && /^data:font\/(woff2?|ttf|otf);base64,[A-Za-z0-9+/]+={0,2}$/.test(brief.fontFile.data) ? brief.fontFile : null;
+    brief.ideaFile = brief.ideaFile && typeof brief.ideaFile.name === 'string' && brief.ideaFile.name.length <= 255 && typeof brief.ideaFile.data === 'string' && /^data:(application\/pdf|application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document);base64,[A-Za-z0-9+/]+={0,2}$/.test(brief.ideaFile.data) ? brief.ideaFile : null;
+    const resolution = parseResolution(brief.resolution);
+    if (resolution) brief.resolution = resolution.label;
     brief.step = [1, 2, 3, 4].includes(brief.step) ? brief.step : 1;
     brief.submitted = brief.submitted === true && /^[a-f0-9]{32}$/.test(brief.submissionId || '');
     const validImage = value => typeof value === 'string' && /^data:image\/(png|jpeg|webp|gif);base64,/.test(value);
@@ -43,15 +46,23 @@
         return { id, name: typeof item.name === 'string' ? item.name.slice(0, 255) : 'Reference', kind: item.kind === 'sketch' ? 'sketch' : 'reference', data: item.data, sketchDocument: item.kind === 'sketch' ? item.sketchDocument : null };
       });
     for (const key of ['reference', 'referenceName', 'sketch', 'sketchDocument']) delete brief[key];
-    // Repair only known option values from the previous encoding bug.
-    const formatMatch = /^(Poster|Square|Wide|Portrait).* (4:5|1:1|16:9|A4)$/.exec(brief.format);
-    brief.format = formatMatch ? `${formatMatch[1]} \u00b7 ${formatMatch[2]}` : defaults.format;
+    // These choices are no longer part of the brief builder.
+    brief.format = brief.style = brief.energy = '';
     if (brief.flowVersion !== 2) {
       brief = { ...defaults, ...brief, flowVersion: 2, step: 1, submitted: false };
     }
     return brief;
   }
+  const briefTitle = () => brief.projectName.trim() || Array.from(brief.idea.trim().split(/\r?\n/, 1)[0]).slice(0, 120).join('') || brief.ideaFile?.name.replace(/\.(docx|pdf)$/i, '').slice(0, 120) || 'Untitled project';
   const resolutions = ['1920 × 1080 px', '1280 × 720 px', '2560 × 1440 px', '3840 × 2160 px', '1080 × 1080 px', '1080 × 1350 px', '1080 × 1920 px', '2480 × 3508 px'];
+  const resolutionHint = 'Enter width × height in whole pixels, for example 1377 x 2111. Each side can be 1 to 1,000,000 px.';
+  function parseResolution(value) {
+    const match = /^\s*(\d{1,7})\s*(?:px)?\s*(?:x|×|by)\s*(\d{1,7})\s*(?:px)?\s*$/i.exec(value);
+    if (!match) return null;
+    const width = Number(match[1]), height = Number(match[2]);
+    if (width < 1 || height < 1 || width > 1000000 || height > 1000000) return null;
+    return { width, height, label: `${width} × ${height} px` };
+  }
   const paletteTemplates = [
     { name: 'Ocean blue', colors: ['#1D355F', '#074766', '#255C76', '#0A6C9F', '#3D9ECB'] },
     { name: 'Warm sunset', colors: ['#71334A', '#B95050', '#E67E51', '#F4B36B', '#FFE0A3'] },
@@ -72,11 +83,43 @@
     { name: 'Arctic frost', colors: ['#30485F', '#6A8CA5', '#A7C6D5', '#D6E6ED', '#F2F8FA'] },
     { name: 'Retro pop', colors: ['#293C69', '#D85A48', '#E8AE45', '#6E9C88', '#F4E5C3'] },
   ];
+  const fontChoices = [
+    { name: 'Manrope', family: 'Manrope, Arial, sans-serif', type: 'Sans serif' },
+    { name: 'Playfair Display', family: '"Playfair Display", Georgia, serif', type: 'Serif' },
+    { name: 'Montserrat', family: 'Montserrat, Arial, sans-serif', type: 'Sans serif' },
+    { name: 'Poppins', family: 'Poppins, Arial, sans-serif', type: 'Sans serif' },
+    { name: 'Roboto', family: 'Roboto, Arial, sans-serif', type: 'Sans serif' },
+    { name: 'DM Mono', family: '"DM Mono", monospace', type: 'Monospace' },
+    { name: 'Inter', family: 'Inter, Arial, sans-serif', type: 'Sans serif' },
+    { name: 'Lato', family: 'Lato, Arial, sans-serif', type: 'Sans serif' },
+    { name: 'Nunito Sans', family: '"Nunito Sans", Arial, sans-serif', type: 'Sans serif' },
+    { name: 'Raleway', family: 'Raleway, Arial, sans-serif', type: 'Sans serif' },
+    { name: 'Oswald', family: 'Oswald, Arial, sans-serif', type: 'Display' },
+    { name: 'Bebas Neue', family: '"Bebas Neue", Arial, sans-serif', type: 'Display' },
+    { name: 'Fredoka', family: 'Fredoka, Arial, sans-serif', type: 'Display' },
+    { name: 'Abril Fatface', family: '"Abril Fatface", Georgia, serif', type: 'Display' },
+    { name: 'Merriweather', family: 'Merriweather, Georgia, serif', type: 'Serif' },
+    { name: 'Lora', family: 'Lora, Georgia, serif', type: 'Serif' },
+    { name: 'Cormorant Garamond', family: '"Cormorant Garamond", Georgia, serif', type: 'Serif' },
+    { name: 'Libre Baskerville', family: '"Libre Baskerville", Georgia, serif', type: 'Serif' },
+    { name: 'Cinzel', family: 'Cinzel, Georgia, serif', type: 'Display' },
+    { name: 'Pacifico', family: 'Pacifico, cursive', type: 'Handwriting' },
+    { name: 'Caveat', family: 'Caveat, cursive', type: 'Handwriting' },
+    { name: 'Space Mono', family: '"Space Mono", monospace', type: 'Monospace' },
+    { name: 'Arial', family: 'Arial, sans-serif', type: 'Sans serif' },
+    { name: 'Georgia', family: 'Georgia, serif', type: 'Serif' },
+    { name: 'Times New Roman', family: '"Times New Roman", serif', type: 'Serif' },
+  ];
   let brief = normalizeBrief(stored);
   let renderedStep = null;
   let submitting = false;
   let addingReferences = false;
   let paletteTemplatesExpanded = false;
+  let loadedFontId = null;
+  let loadedFontFace = null;
+  let importingFont = false;
+  let importingIdeaFile = false;
+  let closeResolutionPicker = () => {};
 
   const app = document.querySelector('#app');
   const toast = document.querySelector('#toast');
@@ -156,17 +199,363 @@
         <h2>Tell us about the project</h2>
         <p class="subtle" style="margin:0 0 22px">You can keep this rough—plain language is perfect.</p>
         <div class="field-grid">
-          <label class="field">Project name<input id="projectName" maxlength="120" placeholder="e.g. Midnight Sessions" value="${escape(brief.projectName)}"></label>
-          <div class="field resolution-field"><label for="resolution">Resolution size</label><select id="resolution" aria-describedby="resolutionPreviewNote">${resolutions.map(size => `<option>${size}</option>`).join('')}</select><figure class="resolution-preview"><div id="resolutionPreview" aria-live="polite"></div><figcaption id="resolutionPreviewNote">Scaled to fit. The canvas keeps your selected proportions.</figcaption></figure></div>
-          <label class="field full">Describe the idea<textarea id="idea" maxlength="5000" placeholder="What should this feel like? What makes it special?">${escape(brief.idea)}</textarea></label>
+          <div class="field resolution-field full">
+            <label for="resolution">Resolution size</label>
+            <div class="resolution-picker" id="resolutionPicker">
+              <div class="resolution-control">
+                <input id="resolution" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="resolutionOptions" aria-describedby="resolutionHelp resolutionPreviewNote" autocomplete="off" spellcheck="false" maxlength="80" placeholder="Search sizes or type your own, e.g. 1377 x 2111" value="${escape(brief.resolution)}">
+                <button id="resolutionToggle" type="button" aria-label="Show resolution presets" aria-expanded="false" aria-controls="resolutionOptions" tabindex="-1"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+              </div>
+              <div id="resolutionOptions" class="resolution-options" role="listbox" aria-label="Resolution sizes" hidden></div>
+            </div>
+            <p id="resolutionHelp" class="resolution-help">Choose a preset or type any width × height in pixels, e.g. 1377 x 2111.</p>
+            <figure class="resolution-preview"><div id="resolutionPreview" aria-live="polite"></div><figcaption id="resolutionPreviewNote">Scaled to fit. The canvas keeps your selected proportions.</figcaption></figure>
+          </div>
+          <div class="field full">
+            <label for="idea">Describe the idea</label>
+            <textarea id="idea" maxlength="5000" placeholder="What should this feel like? What makes it special?">${escape(brief.idea)}</textarea>
+            <div class="idea-file-actions"><input id="ideaFileInput" type="file" accept=".docx,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden><button class="small" id="uploadIdeaFile" type="button">Upload DOCX or PDF</button><span class="subtle">Optional · up to 5 MB</span></div>
+            <div class="idea-file-selected" id="ideaFileSelected" ${brief.ideaFile ? '' : 'hidden'}><span id="ideaFileName">${escape(brief.ideaFile?.name || '')}</span><button class="small" id="removeIdeaFile" type="button">Remove</button></div>
+          </div>
           <label class="field full">Additional note (optional)<textarea id="note" maxlength="2000" placeholder="Anything else your artist should know?">${escape(brief.note)}</textarea></label>
-          <label class="field">Who is it for?<input id="audience" maxlength="1000" placeholder="e.g. curious late-night music fans" value="${escape(brief.audience)}"></label>
-          <label class="field">What should it achieve?<input id="goal" maxlength="1000" placeholder="e.g. get people to the first show" value="${escape(brief.goal)}"></label>
         </div>
       </section>
+      ${footer(null, 'Continue to direction')}`;
+    bindResolutionPicker();
+    renderResolutionPreview();
+    ['idea', 'note'].forEach(key => {
+      const update = event => {
+        brief[key] = event.target.value;
+        save();
+      };
+      document.querySelector('#' + key).oninput = update;
+      document.querySelector('#' + key).onchange = update;
+    });
+    bindIdeaFile();
+    bindFooter(null, () => {
+      if (!validateResolution()) return;
+      if (importingIdeaFile) return say('Please wait for your document to finish loading.');
+      if (!brief.idea.trim() && !brief.ideaFile) {
+        say('Describe your idea or attach a DOCX or PDF file to continue.');
+        document.querySelector('#idea').focus();
+        return;
+      }
+      brief.step = 2; save(); render();
+    });
+  }
+
+  function bindIdeaFile() {
+    const input = document.querySelector('#ideaFileInput');
+    const selected = document.querySelector('#ideaFileSelected');
+    const name = document.querySelector('#ideaFileName');
+    document.querySelector('#uploadIdeaFile').onclick = () => input.click();
+    document.querySelector('#removeIdeaFile').onclick = () => {
+      brief.ideaFile = null; input.value = ''; selected.hidden = true; name.textContent = ''; save();
+    };
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      input.value = '';
+      if (importingIdeaFile) return;
+      importingIdeaFile = true;
+      try {
+        const extension = file.name.split('.').pop().toLowerCase();
+        const types = { pdf: ['application/pdf', '%PDF-'], docx: ['application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'PK\x03\x04'] };
+        if (!types[extension]) throw new Error('Choose a DOCX or PDF document.');
+        if (file.size < 12 || file.size > 5 * 1024 * 1024) throw new Error('Choose a DOCX or PDF smaller than 5 MB.');
+        if (file.name.length > 255 || /[\\/\u0000-\u001f\u007f]/.test(file.name)) throw new Error('Choose a document with a valid filename.');
+        const signature = new Uint8Array(await file.slice(0, 5).arrayBuffer());
+        if (!String.fromCharCode(...signature).startsWith(types[extension][1])) throw new Error('The selected file does not match its document format.');
+        const data = await new Promise((resolve, reject) => {
+          const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(file);
+        });
+        brief.ideaFile = { name: file.name, data: `data:${types[extension][0]};base64,${data.split(',')[1]}` };
+        name.textContent = file.name;
+        selected.hidden = false;
+        await save();
+      } catch (error) { say(error.message || 'The document could not be loaded. Please try again.'); }
+      finally { importingIdeaFile = false; }
+    };
+  }
+
+  function updateFontPreview() {
+    const name = brief.font.trim();
+    const font = fontChoices.find(choice => choice.name.toLowerCase() === name.toLowerCase());
+    const imported = brief.fontFile !== null;
+    const family = imported && loadedFontId === brief.fontFile.id ? loadedFontFace.family : font ? font.family : 'Manrope, Arial, sans-serif';
+    document.querySelector('#fontPickerValue').textContent = name || 'Choose a font';
+    document.querySelector('#fontTriggerSample').style.fontFamily = family;
+    document.querySelector('#fontPreview').hidden = !name;
+    document.querySelector('#fontPreviewLabel').textContent = imported ? `${name} · imported font` : font ? `${font.name} preview` : 'Custom font request';
+    const sample = document.querySelector('#fontPreviewSample');
+    sample.style.fontFamily = family;
+    sample.textContent = imported && loadedFontId !== brief.fontFile.id ? 'Loading imported font preview…' : (font || imported) ? 'The start of something beautiful.' : 'Preview unavailable for this custom font. Your artist will receive its name.';
+    sample.classList.toggle('is-custom', !font && (!imported || loadedFontId !== brief.fontFile.id));
+    const alphabet = document.querySelector('#fontPreviewAlphabet');
+    alphabet.hidden = !font && (!imported || loadedFontId !== brief.fontFile.id);
+    alphabet.style.fontFamily = family;
+    app.querySelectorAll('[data-font-choice]').forEach(button => button.setAttribute('aria-pressed', String(!imported && font === fontChoices[Number(button.dataset.fontChoice)])));
+  }
+
+  function closeFontPicker(restoreFocus = false) {
+    const toggle = document.querySelector('#fontPickerToggle');
+    if (!toggle) return;
+    toggle.setAttribute('aria-expanded', 'false');
+    document.querySelector('#fontPickerPanel').hidden = true;
+    if (restoreFocus) toggle.focus();
+  }
+
+  function bindFontPicker() {
+    updateFontPreview();
+    const picker = document.querySelector('#fontPicker');
+    const toggle = document.querySelector('#fontPickerToggle');
+    const fontStylesheet = document.querySelector('#fontSampleStylesheet');
+    const loadFontSamples = () => { if (fontStylesheet) fontStylesheet.media = 'all'; };
+    if (fontChoices.some(choice => choice.name.toLowerCase() === brief.font.trim().toLowerCase())) loadFontSamples();
+    const search = document.querySelector('#fontSearch');
+    const filterFonts = () => {
+      const query = search.value.trim().toLowerCase();
+      let shown = 0;
+      picker.querySelectorAll('[data-font-choice]').forEach(button => {
+        const font = fontChoices[Number(button.dataset.fontChoice)];
+        button.hidden = !`${font.name} ${font.type}`.toLowerCase().includes(query);
+        if (!button.hidden) shown++;
+      });
+      document.querySelector('#fontNoResults').hidden = shown > 0;
+    };
+    search.oninput = filterFonts;
+    toggle.onclick = () => {
+      const open = toggle.getAttribute('aria-expanded') !== 'true';
+      toggle.setAttribute('aria-expanded', String(open));
+      document.querySelector('#fontPickerPanel').hidden = !open;
+      if (open) {
+        loadFontSamples();
+        search.value = ''; filterFonts();
+        search.focus({ preventScroll: true });
+      }
+    };
+    picker.onkeydown = event => {
+      if (event.key === 'Escape' && toggle.getAttribute('aria-expanded') === 'true') {
+        event.preventDefault(); event.stopPropagation(); closeFontPicker(true);
+      }
+    };
+    picker.onfocusout = event => { if (!picker.contains(event.relatedTarget)) closeFontPicker(); };
+    const choose = name => {
+      brief.font = name;
+      brief.fontFile = null;
+      document.querySelector('#font').value = name;
+      updateImportedFontUI(); updateFontPreview(); save(); closeFontPicker(true);
+    };
+    picker.querySelectorAll('[data-font-choice]').forEach(button => button.onclick = () => choose(fontChoices[Number(button.dataset.fontChoice)].name));
+    document.querySelector('#clearFont').onclick = () => choose('');
+  }
+
+  function updateImportedFontUI() {
+    const panel = document.querySelector('#fontImported');
+    if (!panel) return;
+    panel.hidden = !brief.fontFile;
+    document.querySelector('#fontImportedName').textContent = brief.fontFile?.name || '';
+  }
+
+  async function loadImportedFont(file) {
+    if (loadedFontId === file.id) return loadedFontFace;
+    const face = new FontFace('ImportedBriefFont' + file.id, `url("${file.data}")`);
+    await face.load();
+    if (loadedFontFace) document.fonts.delete(loadedFontFace);
+    document.fonts.add(face);
+    loadedFontFace = face;
+    loadedFontId = file.id;
+    return face;
+  }
+
+  function bindFontImport() {
+    const input = document.querySelector('#fontFileInput');
+    document.querySelector('#importFontButton').onclick = () => input.click();
+    document.querySelector('#removeImportedFont').onclick = () => {
+      brief.fontFile = null; brief.font = '';
+      document.querySelector('#font').value = '';
+      updateImportedFontUI(); updateFontPreview(); save();
+    };
+    if (brief.fontFile && loadedFontId !== brief.fontFile.id) {
+      const file = brief.fontFile;
+      loadImportedFont(file).then(() => { if (brief.fontFile?.id === file.id && document.querySelector('#fontPicker')) updateFontPreview(); }).catch(() => {
+        if (brief.fontFile?.id === file.id && document.querySelector('#fontPreviewSample')) document.querySelector('#fontPreviewSample').textContent = 'This imported font could not be previewed. You can replace it with another file.';
+      });
+    }
+    input.onchange = async event => {
+      const file = event.target.files?.[0];
+      input.value = '';
+      if (!file || importingFont) return;
+      importingFont = true;
+      const button = document.querySelector('#importFontButton');
+      button.disabled = true;
+      try {
+        const types = { woff2: ['font/woff2', 'wOF2'], woff: ['font/woff', 'wOFF'], ttf: ['font/ttf', '\x00\x01\x00\x00'], otf: ['font/otf', 'OTTO'] };
+        if (file.name.length > 255 || /[\\/\x00-\x1F\x7F]/.test(file.name)) throw new Error('Choose a font file with a shorter, valid name.');
+        const extension = file.name.split('.').pop().toLowerCase();
+        if (!types[extension]) throw new Error('Choose a WOFF2, WOFF, TTF, or OTF font file.');
+        if (file.size > 2 * 1024 * 1024 || file.size < 32) throw new Error('Choose a font file smaller than 2 MB.');
+        const bytes = new Uint8Array(await file.slice(0, 4).arrayBuffer());
+        if (String.fromCharCode(...bytes) !== types[extension][1]) throw new Error('The selected file does not match its font format.');
+        const data = await new Promise((resolve, reject) => {
+          const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(file);
+        });
+        const imported = { id: newId(), name: file.name.slice(0, 255), data: `data:${types[extension][0]};base64,${data.split(',')[1]}` };
+        await loadImportedFont(imported);
+        brief.fontFile = imported;
+        brief.font = file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').slice(0, 120);
+        document.querySelector('#font').value = brief.font;
+        closeFontPicker(); updateImportedFontUI(); updateFontPreview(); save();
+        say('Font imported. Its file will be included with your brief.');
+      } catch (error) { say(error.message || 'This font could not be imported.'); }
+      finally { importingFont = false; if (button.isConnected) button.disabled = false; }
+    };
+  }
+
+  document.addEventListener('pointerdown', event => {
+    const picker = document.querySelector('#fontPicker');
+    if (picker && !picker.contains(event.target)) closeFontPicker();
+    const resolutionPicker = document.querySelector('#resolutionPicker');
+    if (resolutionPicker && !resolutionPicker.contains(event.target)) closeResolutionPicker();
+  });
+
+  function bindResolutionPicker() {
+    const picker = document.querySelector('#resolutionPicker');
+    const field = document.querySelector('#resolution');
+    const toggle = document.querySelector('#resolutionToggle');
+    const menu = document.querySelector('#resolutionOptions');
+    let active = -1;
+    let choices = [];
+    const close = () => {
+      menu.hidden = true;
+      field.setAttribute('aria-expanded', 'false');
+      toggle.setAttribute('aria-expanded', 'false');
+      field.removeAttribute('aria-activedescendant');
+      active = -1;
+    };
+    closeResolutionPicker = close;
+    const commit = () => {
+      const size = parseResolution(field.value);
+      if (size) field.value = size.label;
+      brief.resolution = field.value;
+      renderResolutionPreview(); save();
+    };
+    const choose = index => {
+      if (!choices[index]) return;
+      field.value = choices[index];
+      commit(); field.focus(); close();
+    };
+    const highlight = index => {
+      active = index;
+      menu.querySelectorAll('[role="option"]').forEach((option, i) => option.classList.toggle('is-active', i === active));
+      const option = menu.querySelectorAll('[role="option"]')[active];
+      if (option) {
+        field.setAttribute('aria-activedescendant', option.id);
+        option.scrollIntoView({ block: 'nearest' });
+      }
+    };
+    const open = (showAll = false) => {
+      const searchable = value => value.toLowerCase().replace(/px|\s/g, '').replace(/×|by/g, 'x');
+      const query = searchable(field.value);
+      choices = resolutions.filter(size => showAll || searchable(size).includes(query));
+      const custom = parseResolution(field.value);
+      if (custom && !resolutions.includes(custom.label)) choices.unshift(custom.label);
+      active = -1;
+      field.removeAttribute('aria-activedescendant');
+      menu.innerHTML = choices.length ? choices.map((size, index) => `<div id="resolutionOption${index}" class="resolution-option" role="option" aria-selected="${size === custom?.label}"><span>${size}</span>${!resolutions.includes(size) ? '<span class="resolution-custom">Custom size</span>' : ''}</div>`).join('') : '<p class="resolution-no-results">No matching presets. Type your own size, e.g. 1377 x 2111.</p>';
+      menu.querySelectorAll('[role="option"]').forEach((option, index) => {
+        option.onpointerdown = event => event.preventDefault();
+        option.onpointermove = () => highlight(index);
+        option.onclick = () => choose(index);
+      });
+      menu.hidden = false;
+      field.setAttribute('aria-expanded', 'true');
+      toggle.setAttribute('aria-expanded', 'true');
+    };
+    field.onfocus = () => open(true);
+    field.onclick = () => { if (menu.hidden) open(true); };
+    field.oninput = () => {
+      brief.resolution = field.value;
+      renderResolutionPreview(); save(); open();
+    };
+    field.onchange = commit;
+    field.onblur = commit;
+    field.onkeydown = event => {
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        if (menu.hidden) open(true);
+        if (choices.length) highlight(active < 0 ? (event.key === 'ArrowDown' ? 0 : choices.length - 1) : Math.max(0, Math.min(choices.length - 1, active + (event.key === 'ArrowDown' ? 1 : -1))));
+      } else if (event.key === 'Enter') {
+        event.preventDefault();
+        if (!menu.hidden && active >= 0) choose(active);
+        else { commit(); close(); }
+      } else if (event.key === 'Escape' || event.key === 'Tab') {
+        if (event.key === 'Escape' && !menu.hidden) event.preventDefault();
+        close();
+      }
+    };
+    toggle.onpointerdown = event => event.preventDefault();
+    toggle.onclick = () => {
+      if (menu.hidden) { field.focus(); open(true); } else close();
+    };
+    picker.onfocusout = event => { if (!picker.contains(event.relatedTarget)) close(); };
+  }
+
+  function validateResolution() {
+    const size = parseResolution(brief.resolution);
+    if (!size) {
+      if (brief.step !== 1) { brief.step = 1; save(); render(); }
+      document.querySelector('#resolution').setAttribute('aria-invalid', 'true');
+      document.querySelector('#resolution').focus();
+      say(resolutionHint);
+      return false;
+    }
+    brief.resolution = size.label;
+    return true;
+  }
+
+  function renderResolutionPreview() {
+    const size = parseResolution(brief.resolution);
+    document.querySelector('#resolution').setCustomValidity(size ? '' : resolutionHint);
+    if (!size) {
+      document.querySelector('#resolutionPreview').innerHTML = `<p class="resolution-empty">${resolutionHint}</p>`;
+      return;
+    }
+    document.querySelector('#resolution').removeAttribute('aria-invalid');
+    const { width, height } = size;
+    const scale = Math.min(240 / width, 140 / height);
+    const previewWidth = width * scale, previewHeight = height * scale;
+    const x = (320 - previewWidth) / 2, y = (190 - previewHeight) / 2;
+    const gcd = (a, b) => b ? gcd(b, a % b) : a;
+    const divisor = gcd(width, height);
+    const shape = width === height ? 'Square' : width > height ? 'Landscape' : 'Portrait';
+    document.querySelector('#resolutionPreview').innerHTML = `
+      <svg viewBox="0 0 320 190" role="img" aria-label="Blank ${width} by ${height} pixel canvas, ${shape.toLowerCase()}">
+        <rect class="resolution-canvas" x="${x}" y="${y}" width="${previewWidth}" height="${previewHeight}" />
+        <text x="160" y="${y - 10}" text-anchor="middle">${width} px</text>
+        <text transform="translate(${x + previewWidth + 16} 95) rotate(90)" text-anchor="middle">${height} px</text>
+      </svg>
+      <p class="resolution-shape">${shape} <span aria-hidden="true">·</span> ${width / divisor}:${height / divisor}</p>`;
+  }
+
+  function palettePreview(editable = false) {
+    if (!brief.palette.length) return '<p class="subtle">No preferred colors selected.</p>';
+    return '<div class="palette-strip palette-selected-strip" aria-hidden="true">' + brief.palette.map(color => `<span style="background-color:${color}"></span>`).join('') + '</div><div class="palette-swatches">' + brief.palette.map(color => `<span class="palette-swatch"><span class="palette-dot" style="background-color:${color}" aria-hidden="true"></span>${color}${editable ? `<button type="button" data-remove-color="${color}" aria-label="Remove ${color}">&times;</button>` : ''}</span>`).join('') + '</div>';
+  }
+
+  function bindReferenceActions() {
+    app.querySelectorAll('[data-remove-reference]').forEach(button => button.onclick = () => {
+      brief.references = brief.references.filter(item => item.id !== button.dataset.removeReference);
+      save(); render(); say('Reference removed.');
+    });
+    app.querySelectorAll('[data-edit-reference]').forEach(button => button.onclick = () => openSketch(button.dataset.editReference));
+  }
+
+  function renderPreferencesCard() {
+    return `
       <section class="card brief-preferences">
         <div class="row"><h2>Make it your own</h2><span class="hint">Optional</span></div>
-        <p class="subtle">Share your preferred colors, font, and images to guide your artist.</p>
+        <p class="subtle">Share your preferred colors and font to guide your artist.</p>
         <div class="field-grid">
           <div class="field full"><span id="paletteLabel">Preferred color palette</span>
             <button class="palette-toggle" id="togglePaletteTemplates" type="button" aria-expanded="${paletteTemplatesExpanded}" aria-controls="paletteTemplatePanel"><span>Palette templates <span class="palette-toggle-count">(${paletteTemplates.length})</span></span><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true"><path d="m5 7.5 5 5 5-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
@@ -178,23 +567,38 @@
             <div id="paletteChoices" aria-labelledby="paletteLabel"></div>
             <div class="palette-controls"><input id="paletteColor" type="color" value="#3659E3" aria-label="Choose a palette color"><button class="small" type="button" id="addColor">Add color</button><span class="subtle">Customize with up to 8 colors</span></div>
           </div>
-          <label class="field full">Preferred font<input id="font" list="fontSuggestions" maxlength="120" placeholder="Choose a suggestion or type any font name" value="${escape(brief.font)}"><datalist id="fontSuggestions">${['Manrope', 'Playfair Display', 'Arial', 'Georgia', 'Times New Roman', 'Montserrat', 'Poppins', 'Roboto'].map(font => `<option value="${font}"></option>`).join('')}</datalist></label>
+          <div class="field full font-picker" id="fontPicker">
+            <span id="fontLabel">Preferred font</span>
+            <div class="font-picker-control">
+            <button class="font-picker-toggle" id="fontPickerToggle" type="button" aria-expanded="false" aria-controls="fontPickerPanel" aria-labelledby="fontLabel fontPickerValue"><span class="font-trigger-sample" id="fontTriggerSample" aria-hidden="true">Aa</span><span id="fontPickerValue">Choose a font</span><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true"><path d="m5 7.5 5 5 5-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+            <div class="font-picker-panel" id="fontPickerPanel" hidden>
+              <div class="font-panel-heading"><strong>Find your type</strong><button class="small" id="clearFont" type="button">No preference</button></div>
+              <p class="font-help">Choose a sample to see how your text could look.</p>
+              <input class="font-search" id="fontSearch" type="search" placeholder="Search fonts or styles" aria-label="Search fonts or styles" autocomplete="off">
+              <div class="font-options" role="group" aria-label="Font samples">${fontChoices.map((font, index) => `<button class="font-option" type="button" data-font-choice="${index}" aria-pressed="false" aria-label="Choose ${escape(font.name)}"><span class="font-option-sample" style="font-family:${escape(font.family)}" aria-hidden="true">Aa Bb</span><span class="font-option-name">${escape(font.name)}</span><span class="font-option-type">${font.type}</span></button>`).join('')}</div>
+              <p class="font-no-results" id="fontNoResults" role="status" hidden>No fonts match that search. You can still type a custom font name below.</p>
+              <label class="field font-custom" for="font">Have another font in mind?<input id="font" maxlength="120" autocomplete="off" placeholder="Type a custom font name" value="${escape(brief.font)}" aria-describedby="fontCustomHelp"></label><p class="font-help" id="fontCustomHelp">Custom names are shared with your artist. Only the fonts above have a preview.</p>
+            </div>
+            </div>
+            <div class="font-import-actions"><input id="fontFileInput" type="file" accept=".woff2,.woff,.ttf,.otf,font/woff2,font/woff,font/ttf,font/otf" hidden><button class="small" id="importFontButton" type="button">Import font file</button><span class="subtle">WOFF2, WOFF, TTF, or OTF · up to 2 MB</span></div>
+            <div class="font-imported" id="fontImported" ${brief.fontFile ? '' : 'hidden'}><span id="fontImportedName">${escape(brief.fontFile?.name || '')}</span><button class="small" id="removeImportedFont" type="button">Remove</button></div>
+            <div class="font-preview" id="fontPreview" hidden><span class="font-preview-label" id="fontPreviewLabel"></span><p class="font-preview-sample" id="fontPreviewSample">The start of something beautiful.</p><span class="font-preview-alphabet" id="fontPreviewAlphabet">Aa Bb Cc Dd Ee · 0123456789</span></div>
+          </div>
         </div>
-        <div class="row reference-upload"><div><h3>Reference images</h3><p class="subtle">PNG, JPEG, WebP, or GIF; up to 2 MB each. You can add sketches in References.</p></div><input id="file" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden><button class="small" type="button" id="upload" ${addingReferences ? 'disabled' : ''}>${addingReferences ? 'Adding images…' : 'Choose images'}</button></div>
-        ${referenceGallery(true)}
       </section>
-      ${footer(null, 'Continue to direction')}`;
-    document.querySelector('#resolution').value = brief.resolution;
-    renderResolutionPreview();
-    ['projectName', 'resolution', 'idea', 'note', 'font', 'audience', 'goal'].forEach(key => {
-      const update = event => {
-        brief[key] = event.target.value;
-        if (key === 'resolution') renderResolutionPreview();
-        save();
-      };
-      document.querySelector('#' + key).oninput = update;
-      document.querySelector('#' + key).onchange = update;
-    });
+    `;
+  }
+
+  function bindPreferencesCard() {
+    const updateFont = event => {
+      brief.font = event.target.value;
+      if (brief.fontFile) { brief.fontFile = null; updateImportedFontUI(); }
+      updateFontPreview(); save();
+    };
+    document.querySelector('#font').oninput = updateFont;
+    document.querySelector('#font').onchange = updateFont;
+    bindFontPicker();
+    bindFontImport();
     const renderPalette = () => {
       document.querySelector('#paletteChoices').innerHTML = palettePreview(true);
       document.querySelector('#addColor').disabled = brief.palette.length >= 8;
@@ -230,80 +634,17 @@
       if (brief.palette.length >= 8) return;
       brief.palette = [...brief.palette, color]; save(); renderPalette();
     };
-    document.querySelector('#upload').onclick = () => document.querySelector('#file').click();
-    document.querySelector('#file').onchange = handleFile;
-    bindReferenceActions();
-    bindFooter(null, () => {
-      if (addingReferences) return say('Please wait for your images to finish loading.');
-      if (!brief.projectName.trim() || !brief.idea.trim()) {
-        say('Add a project name and a short description to continue.');
-        document.querySelector(!brief.projectName.trim() ? '#projectName' : '#idea').focus();
-        return;
-      }
-      brief.step = 2; save(); render();
-    });
-  }
-
-  function renderResolutionPreview() {
-    const [width, height] = brief.resolution.match(/\d+/g).map(Number);
-    const scale = Math.min(240 / width, 140 / height);
-    const previewWidth = width * scale, previewHeight = height * scale;
-    const x = (320 - previewWidth) / 2, y = (190 - previewHeight) / 2;
-    const gcd = (a, b) => b ? gcd(b, a % b) : a;
-    const divisor = gcd(width, height);
-    const shape = width === height ? 'Square' : width > height ? 'Landscape' : 'Portrait';
-    document.querySelector('#resolutionPreview').innerHTML = `
-      <svg viewBox="0 0 320 190" role="img" aria-label="Blank ${width} by ${height} pixel canvas, ${shape.toLowerCase()}">
-        <rect class="resolution-canvas" x="${x}" y="${y}" width="${previewWidth}" height="${previewHeight}" />
-        <text x="160" y="${y - 10}" text-anchor="middle">${width} px</text>
-        <text transform="translate(${x + previewWidth + 16} 95) rotate(90)" text-anchor="middle">${height} px</text>
-      </svg>
-      <p class="resolution-shape">${shape} <span aria-hidden="true">·</span> ${width / divisor}:${height / divisor}</p>`;
-  }
-
-  function palettePreview(editable = false) {
-    if (!brief.palette.length) return '<p class="subtle">No preferred colors selected.</p>';
-    return '<div class="palette-strip palette-selected-strip" aria-hidden="true">' + brief.palette.map(color => `<span style="background-color:${color}"></span>`).join('') + '</div><div class="palette-swatches">' + brief.palette.map(color => `<span class="palette-swatch"><span class="palette-dot" style="background-color:${color}" aria-hidden="true"></span>${color}${editable ? `<button type="button" data-remove-color="${color}" aria-label="Remove ${color}">&times;</button>` : ''}</span>`).join('') + '</div>';
-  }
-
-  function bindReferenceActions() {
-    app.querySelectorAll('[data-remove-reference]').forEach(button => button.onclick = () => {
-      brief.references = brief.references.filter(item => item.id !== button.dataset.removeReference);
-      save(); render(); say('Reference removed.');
-    });
-    app.querySelectorAll('[data-edit-reference]').forEach(button => button.onclick = () => openSketch(button.dataset.editReference));
   }
 
   function renderDirection() {
-    const chip = tag => `<button class="chip ${brief.tags.includes(tag) ? 'on' : ''}" type="button" aria-pressed="${brief.tags.includes(tag)}" data-tag="${tag}">${tag}</button>`;
     app.innerHTML = `
       <div class="eyebrow">Step 02 — set direction</div>
       <h1>Choose the <em>creative mood.</em></h1>
       <p class="intro">These choices shape the visual language without locking you into a final design.</p>
-      <section class="grid">
-        <div class="card question-card">
-          <h2>Creative settings</h2>
-          <div class="field-grid">
-            <label class="field full">Format<select id="format"><option>Poster · 4:5</option><option>Square · 1:1</option><option>Wide · 16:9</option><option>Portrait · A4</option></select></label>
-            <label class="field">Style<select id="style"><option>Hand-crafted</option><option>Clean & modern</option><option>Expressive</option><option>Classic & editorial</option></select></label>
-            <label class="field">Colour energy<select id="energy"><option>Warm & rich</option><option>Quiet & soft</option><option>High contrast</option><option>Bright & playful</option></select></label>
-          </div>
-        </div>
-        <aside class="card settings"><h2>Quick reminder</h2><p class="subtle" style="position:relative;z-index:1;line-height:1.6">You can come back and adjust any of these choices before you submit the brief.</p></aside>
-      </section>
-      <section class="card sources" style="margin-top:20px"><h2>Choose a few keywords</h2><p>Pick the words that should come through in the finished work.</p><div class="chips">${['Warm','Playful','Editorial','Minimal','Surprising','Bold','Elegant','Experimental'].map(chip).join('')}</div></section>
+      ${renderPreferencesCard()}
       ${footer(1, 'Continue to references')}`;
-    ['format', 'style', 'energy'].forEach(key => {
-      document.querySelector('#' + key).value = brief[key];
-      document.querySelector('#' + key).onchange = event => { brief[key] = event.target.value; save(); };
-    });
-    document.querySelectorAll('[data-tag]').forEach(button => button.onclick = () => {
-      const tag = button.dataset.tag;
-      brief.tags = brief.tags.includes(tag) ? brief.tags.filter(item => item !== tag) : [...brief.tags, tag];
-      save(); render();
-      app.querySelectorAll('[data-tag]').forEach(item => { if (item.dataset.tag === tag) item.focus(); });
-    });
-    bindFooter(1, () => { brief.step = 3; save(); render(); });
+    bindPreferencesCard();
+    bindFooter(1, () => { if (addingReferences) return say('Please wait for your images to finish loading.'); if (importingFont) return say('Please wait for your font to finish loading.'); brief.step = 3; save(); render(); });
   }
 
   function referenceGallery(editable = false) {
@@ -320,7 +661,7 @@
       <div class="eyebrow">Step 03 ? visual references</div>
       <h1>Give your idea <em>a point of view.</em></h1>
       <p class="intro">Collect images and sketches that explain your idea. Add as many references as you need.</p>
-      <div class="source-summary"><div><strong>${escape(brief.projectName || 'Untitled project')}</strong><div>${escape(brief.idea || 'No description yet')}</div></div><button class="summary-link" id="editDescribe">Edit description</button></div>
+      <div class="source-summary"><div><strong>${escape(briefTitle())}</strong><div>${escape(brief.idea || (brief.ideaFile ? `Idea attached: ${brief.ideaFile.name}` : 'No description yet'))}</div></div><button class="summary-link" id="editDescribe">Edit description</button></div>
       <section class="card sources"><div class="row"><div><h2>Add visual references</h2><p>Combine photos, moodboards, textures, and your own sketches.</p></div><span class="hint">Optional</span></div>
         <div class="sourcegrid">
           <div class="source"><div><div class="icon">&uarr;</div><h3>Upload images</h3><p>Select several files at once, or keep adding more. PNG, JPEG, WebP, or GIF; up to 2 MB each.</p></div><input id="file" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden><button type="button" id="upload" ${addingReferences ? 'disabled' : ''}>${addingReferences ? 'Adding images?' : 'Choose images'}</button></div>
@@ -388,8 +729,8 @@
       <div class="eyebrow">Step 04 — review your brief</div>
       <h1>Your brief is <em>taking shape.</em></h1>
       <p class="intro">Review the essentials and submit when it feels right.</p>
-      <section class="card brief-preferences"><div class="summary"><strong>Resolution size</strong><div>${escape(brief.resolution)}</div></div><div class="summary"><strong>Additional note</strong><div>${escape(brief.note || 'Not specified')}</div></div><div class="summary"><strong>Preferred font</strong><div>${escape(brief.font || 'No preference')}</div></div><div class="summary"><strong>Preferred color palette</strong>${palettePreview()}</div></section>
-      <section class="review"><div class="card"><div class="summary"><strong>Project</strong><div>${escape(brief.projectName)}</div></div><div class="summary"><strong>Idea</strong><div>${escape(brief.idea)}</div></div><div class="summary"><strong>Audience & goal</strong><div>${escape(brief.audience || 'Not specified')} · ${escape(brief.goal || 'Not specified')}</div></div><div class="summary"><strong>Direction</strong><div>${escape(brief.style)} · ${escape(brief.energy)} · ${escape(brief.format)}</div></div><div class="summary"><strong>Keywords</strong><div>${brief.tags.length ? brief.tags.map(tag => `<span class="chip on" style="display:inline-block;margin:0 5px 5px 0">${escape(tag)}</span>`).join('') : 'No keywords selected'}</div></div></div><div class="card"><h2>Visual references (${brief.references.length})</h2>${referenceGallery()}</div></section>
+      <section class="card brief-preferences"><div class="summary"><strong>Resolution size</strong><div>${escape(brief.resolution)}</div></div><div class="summary"><strong>Additional note</strong><div>${escape(brief.note || 'Not specified')}</div></div><div class="summary"><strong>Preferred font</strong><div>${escape(brief.font || 'No preference')}${brief.fontFile ? `<br>Imported file: ${escape(brief.fontFile.name)}` : ''}</div></div><div class="summary"><strong>Preferred color palette</strong>${palettePreview()}</div></section>
+      <section class="review"><div class="card"><div class="summary"><strong>Project</strong><div>${escape(briefTitle())}</div></div><div class="summary"><strong>Idea</strong><div>${escape(brief.idea || 'Provided in the attached document')}</div></div>${brief.ideaFile ? `<div class="summary"><strong>Idea document</strong><div>${escape(brief.ideaFile.name)}</div></div>` : ''}</div><div class="card"><h2>Visual references (${brief.references.length})</h2>${referenceGallery()}</div></section>
       <section class="card private-code"><h2>Private project code</h2><p class="subtle">After submitting, share this code only with your chosen artist. They must enter it to receive your brief and references.</p><label for="accessCode">Your unique code</label><div class="code-actions"><input id="accessCode" readonly value="${escape(brief.accessCode)}" spellcheck="false"><button class="small" type="button" id="copyCode">Copy code</button></div><p class="subtle">You can find this code again in My briefs.</p></section>
       <p id="submissionStatus" role="status" aria-live="polite"></p>
       ${footer(3, 'Submit brief')}`;
@@ -401,10 +742,12 @@
     bindFooter(3, async () => {
       if (submitting) return;
       if (addingReferences) return say('Please wait for your images to finish loading.');
-      if (!brief.projectName.trim() || !brief.idea.trim()) {
+      if (importingIdeaFile) return say('Please wait for your document to finish loading.');
+      if (!validateResolution()) return;
+      if (!brief.idea.trim() && !brief.ideaFile) {
         brief.step = 1; save(); render();
-        say('Add a project name and description before saving your brief.');
-        document.querySelector(!brief.projectName.trim() ? '#projectName' : '#idea').focus();
+        say('Describe your idea or attach a DOCX or PDF file before saving your brief.');
+        document.querySelector('#idea').focus();
         return;
       }
       const status = document.querySelector('#submissionStatus');
@@ -429,7 +772,9 @@
       try {
         const snapshot = {};
         snapshot.accessCode = brief.accessCode;
-        for (const key of ['projectName', 'projectType', 'resolution', 'idea', 'note', 'font', 'palette', 'audience', 'goal', 'format', 'style', 'energy', 'tags']) snapshot[key] = brief[key];
+        for (const key of ['projectName', 'projectType', 'resolution', 'idea', 'note', 'font', 'palette', 'audience', 'goal']) snapshot[key] = brief[key];
+        if (brief.ideaFile) snapshot.ideaFile = { name: brief.ideaFile.name, data: brief.ideaFile.data };
+        if (brief.fontFile) snapshot.fontFile = { name: brief.fontFile.name, data: brief.fontFile.data };
         snapshot.references = [];
         for (const [index, reference] of brief.references.entries()) {
           status.textContent = `Uploading reference ${index + 1} of ${brief.references.length}: ${reference.name}`;
@@ -439,7 +784,7 @@
           if (result.id !== id) throw new Error('A reference could not be confirmed. Please retry.');
           snapshot.references.push(id);
         }
-        status.textContent = 'Saving your brief and references to your account…';
+        status.textContent = 'Saving your brief and attachments to your account…';
         const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(snapshot)));
         const signature = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
         if (brief.pendingSignature !== signature || !/^[a-f0-9]{32}$/.test(brief.pendingId || '')) {
@@ -477,7 +822,7 @@
     app.innerHTML = `<section class="success"><div class="successmark" aria-hidden="true">&#10003;</div>
       <div class="eyebrow">Brief submitted</div>
       <h1>Your idea is <em>ready to share.</em></h1>
-      <p>Your creative brief and all its visual references are saved to your account. You can reopen them from My briefs.</p>
+      <p>Your creative brief and its attachments are saved to your account. You can reopen them from My briefs.</p>
       <p class="subtle submission-id">Submission ID: ${escape(brief.submissionId)}</p>
       <div class="success-actions"><a class="continue" href="submitted.php?id=${escape(brief.submissionId)}">View submitted brief</a>
       <button class="continue" id="newBrief">Create another brief</button></div></section>`;
@@ -529,7 +874,7 @@
   let activeSketch = null;
   let sketchOwner = null;
   const sketchpad = window.createClientSketchpad({
-    getName: () => brief.projectName,
+    getName: briefTitle,
     onSave: async (image, documentData) => {
       if (!activeSketch || sketchOwner !== brief) return;
       const existing = brief.references.find(item => item.id === activeSketch.id);
