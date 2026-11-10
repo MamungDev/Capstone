@@ -10,7 +10,7 @@ const root = path.resolve(__dirname, '..');
 const php = process.env.PHP_BINARY || 'C:/xampp/php/php.exe';
 const dbName = 'mamungkun_admin_test_' + randomBytes(8).toString('hex');
 const secret = randomBytes(24).toString('hex');
-const env = { ...process.env, DB_DRIVER: 'mysql', DB_NAME: dbName, ADMIN_ALLOWED_EMAILS: 'admin@example.com,second@example.com,disabled@example.com', SESSION_DRIVER: 'mysql', SESSION_COOKIE_PATH: '/' };
+const env = { ...process.env, DB_DRIVER: 'mysql', DB_NAME: dbName, ADMIN_ALLOWED_EMAILS: 'admin@example.com,second@example.com,disabled@example.com,regalariojayveesevilla@gmail.com', SESSION_DRIVER: 'mysql', SESSION_COOKIE_PATH: '/' };
 delete env.VERCEL;
 let server;
 let base;
@@ -69,6 +69,7 @@ async function startServer(allowed = env.ADMIN_ALLOWED_EMAILS) {
       $p->exec('CREATE DATABASE '.$name);
       $p->exec('USE '.$name);
       foreach (explode(';', preg_replace('/^\\s*--[^\\r\\n]*$/m', '', file_get_contents('auth/schema.sql'))) as $sql) if (trim($sql) !== '') $p->exec($sql);
+      $p->exec('DROP TABLE admin_access_requests'); // Exercise automatic upgrade of existing databases.
       $q = $p->prepare('INSERT INTO users (role, email, display_name, password_hash) VALUES (?, ?, ?, ?)');
       for ($i = 1; $i <= 22; $i++) $q->execute([$i % 2 ? 'client' : 'artist', 'fixture'.$i.'@example.invalid', $i === 1 ? '<script>alert(1)</script>' : 'Fixture '.$i, password_hash('fixture-password-123', PASSWORD_DEFAULT)]);
       $p->exec("INSERT INTO client_briefs (id, client_id, project_name, details_json, payload_hash) VALUES ('".str_repeat('a', 32)."', 1, 'Temporary brief', '{}', '".str_repeat('b', 64)."')");
@@ -108,6 +109,65 @@ async function startServer(allowed = env.ADMIN_ALLOWED_EMAILS) {
     const security = await admin.request('Admin/index.php?tab=security');
     assert.match(security.text, /approved Google account/);
     assert.doesNotMatch(security.text, /name="admin_password"|name="new_password"|authenticator|recovery code/i);
+    assert.match(security.text, /Submit invitation for approval/);
+    assert.doesNotMatch(security.text, /value="approve_admin_invite"|value="disable_admin"/);
+    const loginGoogle = (email, subject) => {
+      const id = execFileSync(php, ['-r', `
+        require 'auth/admin.php';
+        admin_google_signin(['email' => $argv[1], 'sub' => $argv[2], 'email_verified' => true]);
+        echo session_id(); session_write_close();
+      `, email, subject], { cwd: root, env, encoding: 'utf8', windowsHide: true }).trim();
+      const user = session(); user.cookie = 'mamungkun_session=' + id; return user;
+    };
+    const googleDenied = email => {
+      const result = execFileSync(php, ['-r', `
+        require 'auth/admin.php';
+        try { admin_google_signin(['email' => $argv[1], 'sub' => 'invited-google-sub', 'email_verified' => true]); echo 'UNSAFE'; }
+        catch (DomainException $e) { echo $e->getMessage(); }
+      `, email], { cwd: root, env, encoding: 'utf8', windowsHide: true }).trim();
+      assert.equal(result, 'admin-not-allowed');
+    };
+    const owner = loginGoogle('regalariojayveesevilla@gmail.com', 'owner-google-sub');
+    await owner.request('Admin/index.php?tab=security');
+    const invitation = { action: 'invite_admin', email: '  Invited.Admin@gmail.com ', reason: 'Invite our project coordinator <script>unsafe()</script>', csrf: admin.csrf };
+    assert.equal((await admin.request('Admin/index.php?tab=security', { ...invitation, csrf: 'wrong' })).status, 403);
+    assert.equal((await admin.request('Admin/index.php?tab=security', { ...invitation, email: 'other@example.com' })).status, 422);
+    assert.equal((await admin.request('Admin/index.php?tab=security', invitation)).status, 303);
+    assert.equal((await admin.request('Admin/index.php?tab=security', invitation)).status, 409, 'Duplicate invitation rejected');
+    googleDenied('invited.admin@gmail.com');
+    const review = { action: 'approve_admin_invite', email: 'invited.admin@gmail.com', version: '0', reason: 'Verified this administrator', csrf: admin.csrf };
+    assert.equal((await admin.request('Admin/index.php?tab=security', { ...review, reviewed_by_email: 'regalariojayveesevilla@gmail.com' })).status, 403, 'Non-owner cannot forge approval');
+    assert.equal((await admin.request('Admin/index.php?tab=security', { action: 'enable_admin', admin_id: '1', reason: 'Try bypassing approval', csrf: admin.csrf })).status, 403);
+    const pendingPage = await owner.request('Admin/index.php?tab=security');
+    assert.match(pendingPage.text, /value="approve_admin_invite"/);
+    assert.match(pendingPage.text, /&lt;script&gt;unsafe\(\)&lt;\/script&gt;/);
+    assert.doesNotMatch(pendingPage.text, /<script>unsafe\(\)/);
+    assert.equal((await owner.request('Admin/index.php?tab=security', { ...review, csrf: 'wrong' })).status, 403);
+    assert.equal((await owner.request('Admin/index.php?tab=security', { ...review, csrf: owner.csrf, version: '99' })).status, 409);
+    assert.equal((await owner.request('Admin/index.php?tab=security', { ...review, csrf: owner.csrf, action: 'reject_admin_invite' })).status, 303);
+    googleDenied('invited.admin@gmail.com');
+    assert.equal((await admin.request('Admin/index.php?tab=security', invitation)).status, 303, 'Rejected invitation can be resubmitted');
+    assert.equal((await owner.request('Admin/index.php?tab=security', { ...review, csrf: owner.csrf })).status, 409, 'Old review form cannot approve a new request');
+    assert.equal((await owner.request('Admin/index.php?tab=security', { ...review, csrf: owner.csrf, version: '2' })).status, 303);
+    const invited = loginGoogle('invited.admin@gmail.com', 'invited-google-sub');
+    assert.equal((await invited.request()).status, 200, 'Approved Gmail signs in without an environment allowlist entry');
+    const approvedPage = await admin.request('Admin/index.php?tab=security');
+    assert.match(approvedPage.text, /Copy sign-in link/);
+    assert.doesNotMatch(approvedPage.text, /value="approve_admin_invite"|value="revoke_admin_invite"/);
+    assert.equal((await admin.request('Admin/index.php?tab=security', { ...review, action: 'revoke_admin_invite', version: '3' })).status, 403);
+    assert.equal((await owner.request('Admin/index.php?tab=security', { ...review, csrf: owner.csrf, action: 'revoke_admin_invite', version: '3' })).status, 303);
+    assert.equal((await invited.request()).status, 302, 'Revocation ends existing sessions');
+    googleDenied('invited.admin@gmail.com');
+    assert.equal((await admin.request('Admin/index.php?tab=security', invitation)).status, 303, 'Revoked invitation can be requested again');
+    googleDenied('invited.admin@gmail.com');
+    assert.equal((await owner.request('Admin/index.php?tab=security', { ...review, csrf: owner.csrf, version: '5' })).status, 303);
+    const restored = loginGoogle('invited.admin@gmail.com', 'invited-google-sub');
+    assert.equal((await restored.request()).status, 200, 'Owner reapproval restores access');
+    fixture(`
+      $p->exec('USE '.$name);
+      if ($p->query("SELECT COUNT(*) FROM admin_audit WHERE action LIKE 'admin_invitation_%'")->fetchColumn() != 7) throw new RuntimeException('Invitation audit trail missing');
+    `);
+    console.log('PASS: invitation migration, Gmail validation, CSRF, owner-only review, duplicate/stale requests, rejection, approval, Google access, revocation, reapproval, and audit history.');
     const deletion = { action: 'delete_user', user_id: '1', confirmation: 'fixture1@example.invalid', reason: 'Remove temporary test account', csrf: admin.csrf };
     assert.equal((await admin.request('Admin/index.php?tab=accounts', { ...deletion, csrf: 'wrong' })).status, 403);
     assert.equal((await admin.request('Admin/index.php?tab=accounts', { ...deletion, confirmation: 'wrong@example.invalid' })).status, 422);

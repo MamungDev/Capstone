@@ -234,7 +234,7 @@ if (($_GET['auth'] ?? '') === 'admin') {
         <p class="auth-eyebrow">MAMUNGKUN ADMINISTRATION</p>
         <h2 id="admin-title">Welcome back.<br>A space to care.</h2>
         <p id="admin-description">Sign in to look after your creative community.</p>
-        <?php if ($googleEnabled && admin_allowed_emails()): ?>
+        <?php if ($googleEnabled): ?>
         <a class="auth-google" href="auth/google-start.php?role=admin">Continue with Google</a>
         <?php else: ?>
         <button class="auth-google" type="button" disabled>Continue with Google</button>

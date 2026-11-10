@@ -138,3 +138,12 @@
   .admin-page th, .admin-page td { padding: 16px; min-width: 120px; }
   .admin-activity-list li { align-items: flex-start; flex-direction: column; gap: 6px; }
 }
+.admin-page .invitation-entry { border-top: 1px solid #e7ebf3; padding-top: 22px; margin-top: 22px; overflow-wrap: anywhere; }
+.admin-page .invitation-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.admin-page .invitation-heading h3 { font-size: 16px; margin: 0; }
+.admin-page .access-status { border-radius: 20px; padding: 5px 12px; font-size: 12px; font-weight: 700; background: #edf0f7; color: #34415e; }
+.admin-page .access-status-pending { background: #fff3db; color: #815600; }
+.admin-page .access-status-approved { background: #e7f5ed; color: #246640; }
+.admin-page .access-status-rejected, .admin-page .access-status-revoked { background: #fceceb; color: #943831; }
+.admin-page .invitation-buttons { display: flex; gap: 12px; flex-wrap: wrap; }
+.admin-page .invitation-buttons .secondary { background: #edf0f7; color: var(--ink); }

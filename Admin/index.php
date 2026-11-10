@@ -35,6 +35,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$e instanceof DomainException) error_log('Admin management: ' . get_class($e));
     }
 }
+$invitations = [];
 $rows = []; $total = 0; $pages = 1; $user = null; $project = null; $overview = [];
 try {
     $term = '%' . str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $q) . '%';
@@ -74,6 +75,7 @@ try {
         $query=db()->prepare('SELECT * FROM admin_audit'.$where.' ORDER BY id DESC LIMIT 20 OFFSET '.(($page-1)*20));$query->execute($params);$rows=$query->fetchAll();
     } elseif ($tab === 'security') {
         $rows=db()->query('SELECT id,email,display_name,active FROM admin_accounts ORDER BY id')->fetchAll();
+        $invitations=db()->query("SELECT r.*, a.active AS account_active FROM admin_access_requests r LEFT JOIN admin_accounts a ON a.email = r.email ORDER BY CASE WHEN r.status = 'pending' THEN 0 ELSE 1 END, r.created_at DESC, r.email LIMIT 100")->fetchAll();
     } else {
         $overview['accounts']=(int)db()->query('SELECT COUNT(*) FROM users')->fetchColumn();
         $overview['suspended']=(int)db()->query('SELECT COUNT(*) FROM account_controls WHERE suspended=1')->fetchColumn();
@@ -137,7 +139,57 @@ try {
 <?php if(!$rows): ?><section class="admin-card"><p class="empty">No activity matches your search.</p></section><?php endif; ?><?php foreach($rows as $row): ?><article class="admin-card"><strong><?= html(ucfirst(str_replace('_',' ',$row['action']))) ?></strong><p><?= html($row['actor_email'].' / '.$row['created_at'].' / '.$row['target_type'].' '.$row['target_id']) ?></p><p><?= html($row['reason']) ?></p><details><summary>Previous and new values</summary><pre>Before: <?= html($row['before_json']) ?>
 After: <?= html($row['after_json']) ?></pre></details></article><?php endforeach; ?>
 <?php elseif($tab==='security'): ?>
-<section class="admin-card"><h2>Administrators</h2><p>Each administrator has full management access and signs in with an approved Google account. Contact the site owner to approve another Google account. Your own account cannot be disabled here.</p><?php foreach($rows as $row): ?><p><strong><?= html($row['display_name']) ?></strong> <?= html($row['email']) ?> &middot; <?= $row['active']?'Active':'Disabled' ?></p><?php if((int)$row['id']!==(int)$admin['id']): action_start($row['active']?'disable_admin':'enable_admin',['admin_id'=>$row['id']]); reason_fields(); ?><button class="button"><?= $row['active']?'Disable administrator':'Enable administrator' ?></button></form><?php endif; endforeach; ?></section>
+<section class="admin-card">
+  <h2>Invite an administrator</h2>
+  <p>Invite a Gmail account to help manage the community. Every invitation needs approval from <?= html(admin_owner_email()) ?> before access is granted.</p>
+  <?php action_start('invite_admin'); ?>
+    <label>Gmail address<input name="email" type="email" required maxlength="254" autocomplete="off" placeholder="name@gmail.com"></label>
+    <?php reason_fields(); ?>
+    <button class="button">Submit invitation for approval</button>
+  </form>
+  <p>No email is sent automatically. Once approved, share the admin sign-in link with the invited person.</p>
+</section>
+<section class="admin-card">
+  <h2>Administrator invitations</h2>
+  <p><?= admin_is_owner($admin) ? 'Review pending invitations below. Approving grants full administrator access to the invited Google account.' : 'Only ' . html(admin_owner_email()) . ' can approve, reject, or revoke invitations.' ?></p>
+  <?php if (!$invitations): ?><p class="empty">No administrator invitations yet.</p><?php endif; ?>
+  <?php foreach ($invitations as $invitation): ?>
+  <article class="invitation-entry">
+    <div class="invitation-heading"><h3><?= html($invitation['email']) ?></h3><span class="access-status access-status-<?= html($invitation['status']) ?>"><?= html(ucfirst($invitation['status'])) ?></span></div>
+    <p>Requested by <?= html($invitation['requested_by_email']) ?> &middot; <?= html($invitation['created_at']) ?></p>
+    <p><?= html($invitation['reason']) ?></p>
+    <?php if ($invitation['reviewed_by_email']): ?><p>Reviewed by <?= html($invitation['reviewed_by_email']) ?> &middot; <?= html($invitation['reviewed_at']) ?><br><?= html($invitation['review_reason']) ?></p><?php endif; ?>
+    <?php if ($invitation['status'] === 'pending' && admin_is_owner($admin)): ?>
+      <form method="post" class="admin-action">
+        <?php field('csrf', csrf_token()); field('email', $invitation['email']); field('version', $invitation['version']); reason_fields(); ?>
+        <div class="invitation-buttons"><button class="button" name="action" value="approve_admin_invite">Approve invitation</button><button class="button secondary" name="action" value="reject_admin_invite">Reject invitation</button></div>
+      </form>
+    <?php elseif ($invitation['status'] === 'approved'): ?>
+      <?php if ($invitation['account_active'] !== null && !(int) $invitation['account_active']): ?><p>This administrator is disabled. The owner can restore access below.</p><?php else: ?>
+      <p><a id="admin-invite-link-<?= html($invitation['version']) ?>-<?= html(substr(hash('sha256', $invitation['email']), 0, 12)) ?>" href="../index.php?auth=admin">Admin sign-in link</a>
+      <button type="button" data-copy-link="admin-invite-link-<?= html($invitation['version']) ?>-<?= html(substr(hash('sha256', $invitation['email']), 0, 12)) ?>">Copy sign-in link</button></p>
+      <?php endif; ?>
+      <?php if (admin_is_owner($admin)): action_start('revoke_admin_invite', ['email' => $invitation['email'], 'version' => $invitation['version']]); reason_fields(); ?>
+      <button class="button danger">Revoke invitation and access</button></form>
+      <?php endif; ?>
+    <?php endif; ?>
+  </article>
+  <?php endforeach; ?>
+  <span id="invitation-copy-status" role="status" aria-live="polite"></span>
+  <?php if (count($invitations) === 100): ?><p>Showing the latest 100 invitations, with pending requests first. Earlier decisions remain in Activity.</p><?php endif; ?>
+</section>
+<section class="admin-card">
+  <h2>Administrators</h2>
+  <p>Each administrator has full management access and signs in with an approved Google account. Only the owner can enable or disable administrators. Your own account cannot be disabled here.</p>
+  <?php foreach($rows as $row): ?>
+  <div class="invitation-entry">
+    <p><strong><?= html($row['display_name']) ?></strong> <?= html($row['email']) ?> &middot; <?= $row['active']?'Active':'Disabled' ?><?= admin_is_owner($row) ? ' &middot; Owner' : '' ?></p>
+    <?php if(admin_is_owner($admin) && (int)$row['id']!==(int)$admin['id'] && !admin_is_owner($row)): action_start($row['active']?'disable_admin':'enable_admin',['admin_id'=>$row['id']]); reason_fields(); ?>
+    <button class="button"><?= $row['active']?'Disable administrator':'Enable administrator' ?></button></form>
+    <?php endif; ?>
+  </div>
+  <?php endforeach; ?>
+</section>
 <?php endif; ?>
 <?php if(in_array($tab,['accounts','projects','activity'],true)): ?><nav class="pagination" aria-label="Result pages"><span>Page <?= $page ?> of <?= $pages ?></span><div><?php if($page>1): ?><a href="?<?= html(http_build_query(['tab'=>$tab,'q'=>$q,'role'=>$role??'','status'=>$filter??'','page'=>$page-1])) ?>">Previous</a><?php endif; ?> <?php if($page<$pages): ?><a href="?<?= html(http_build_query(['tab'=>$tab,'q'=>$q,'role'=>$role??'','status'=>$filter??'','page'=>$page+1])) ?>">Next</a><?php endif; ?></div></nav><?php endif; ?>
 </main></div></body></html>

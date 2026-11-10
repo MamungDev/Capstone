@@ -191,6 +191,7 @@ function ensure_database_schema(): void
         db()->query('SELECT 1 FROM brief_workflow LIMIT 0');
         db()->query('SELECT 1 FROM admin_login_limits LIMIT 0');
         db()->query('SELECT 1 FROM admin_accounts LIMIT 0');
+        db()->query('SELECT 1 FROM admin_access_requests LIMIT 0');
         db()->query('SELECT 1 FROM admin_audit LIMIT 0');
         db()->query('SELECT 1 FROM admin_security_lock LIMIT 0');
         db()->query('SELECT 1 FROM account_controls LIMIT 0');

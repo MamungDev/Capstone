@@ -48,7 +48,7 @@ Google verifies identity through the PHP OAuth callback. Application accounts re
    | `GOOGLE_CLIENT_SECRET` | Client secret from Google; mark Sensitive |
    | `GOOGLE_REDIRECT_URI` | `https://capstone-smoky-theta.vercel.app/auth/google-callback.php` |
 
-5. Push the code changes and deploy with those variables. Open the production homepage, choose **Client**, **Artist**, or **Admin**, then **Continue with Google**. New client and artist Google accounts are created in the chosen role. Admin access requires an email on `ADMIN_ALLOWED_EMAILS`.
+5. Push the code changes and deploy with those variables. Open the production homepage, choose **Client**, **Artist**, or **Admin**, then **Continue with Google**. New client and artist Google accounts are created in the chosen role. Admin access requires an email on `ADMIN_ALLOWED_EMAILS` or an owner-approved invitation.
 
 Accounts already registered with a password must continue using their password. Matching emails are never automatically linked; linking an existing password account would require a separate authenticated flow. For the first Google login, use a Google account that has not already been registered with a password in this app.
 
@@ -70,7 +70,7 @@ References: [Google web server OAuth flow](https://developers.google.com/identit
 
 Choose Admin on the homepage to open the sign-in modal. `/Admin/login.php` redirects signed-out visitors to that modal. Successful sign-in opens `/Admin/index.php` to manage the accounts in the database used by that deployment. Signed-out visitors to the account manager are redirected to sign-in. The manager lists names, emails, roles, registration dates, and submitted brief counts, with search, role filters, and pagination. App client and artist passwords do not grant admin access.
 
-Administrator access uses Google sign-in only and stays separate from client and artist accounts. Set the exact approved Google emails in `ADMIN_ALLOWED_EMAILS` (or `admin_allowed_emails` locally), along with the Google OAuth and database settings above. No separate admin password, authenticator enrollment, setup key, or recovery codes are required. See [ADMIN_SETUP.md](ADMIN_SETUP.md).
+Administrator access uses Google sign-in only and stays separate from client and artist accounts. Keep the owner, `regalariojayveesevilla@gmail.com`, in `ADMIN_ALLOWED_EMAILS` (or `admin_allowed_emails` locally), along with the Google OAuth and database settings above. New Gmail administrators can be invited from Admin access and need that owner's approval. No separate admin password, authenticator enrollment, setup key, or recovery codes are required. See [ADMIN_SETUP.md](ADMIN_SETUP.md).
 
 Select **Delete** to review an account and its brief count, then type its exact email to confirm. Confirming permanently deletes that account and all its submitted briefs, including attached images and sketches. Other accounts are preserved. A deleted account loses access on its next request. The manager does not show credentials. It supports profile editing and one-time password-reset links for client and artist accounts.
 

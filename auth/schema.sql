@@ -148,3 +148,17 @@ CREATE TABLE IF NOT EXISTS password_reset_tokens (
  expires_at BIGINT NOT NULL,
  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS admin_access_requests (
+ email VARCHAR(254) NOT NULL PRIMARY KEY,
+ requested_by BIGINT NOT NULL,
+ requested_by_email VARCHAR(254) NOT NULL,
+ reason VARCHAR(500) NOT NULL,
+ status VARCHAR(16) NOT NULL DEFAULT 'pending',
+ version INTEGER NOT NULL DEFAULT 0,
+ reviewed_by_email VARCHAR(254) NULL,
+ review_reason VARCHAR(500) NULL,
+ created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ reviewed_at TIMESTAMP NULL DEFAULT NULL,
+ CHECK (status IN ('pending', 'approved', 'rejected', 'revoked'))
+) ENGINE=InnoDB;

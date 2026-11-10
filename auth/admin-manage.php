@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__ . '/admin.php';
+require_once __DIR__ . '/admin-invitations.php';
 require_once __DIR__ . '/workflow.php';
 
 function admin_text(array $input, string $key): string { return is_string($input[$key] ?? null) ? trim($input[$key]) : ''; }
@@ -11,6 +12,9 @@ function admin_manage(array $input): array
     $action = admin_text($input, 'action');
     if ($action === 'logout') { admin_audit('logout', 'admin', (string) $admin['id']); admin_logout(); return ['message' => 'Signed out.', 'logout' => true]; }
     $reason = admin_reason($input['reason'] ?? null);
+    if (in_array($action, ['invite_admin', 'approve_admin_invite', 'reject_admin_invite', 'revoke_admin_invite'], true)) {
+        return admin_invitation_manage($input, $action, $reason);
+    }
     if ($action === 'delete_user') {
         admin_delete_user((int) admin_text($input, 'user_id'), admin_text($input, 'confirmation'), $reason);
         return ['message' => 'Account and its submitted briefs deleted.'];
@@ -95,10 +99,13 @@ function admin_manage(array $input): array
             }
         } elseif (in_array($action, ['disable_admin', 'enable_admin'], true)) {
             $pdo->query('SELECT id FROM admin_security_lock WHERE id = 1 FOR UPDATE');
+            $current = admin_current();
+            if (!$current || !admin_is_owner($current)) throw new DomainException('Only the owner can enable or disable administrators.', 403);
             $id = (int) admin_text($input, 'admin_id');
             if ($id === (int) $admin['id']) throw new DomainException('You cannot disable your own account.', 422);
             $q = $pdo->prepare('SELECT id, email, active FROM admin_accounts WHERE id = ? FOR UPDATE'); $q->execute([$id]); $other = $q->fetch();
             if (!$other) throw new DomainException('Administrator not found.', 404);
+            if (admin_is_owner($other)) throw new DomainException('The owner account cannot be disabled.', 403);
             $active = $action === 'enable_admin' ? 1 : 0;
             $pdo->prepare('UPDATE admin_accounts SET active = ?, session_version = session_version + 1 WHERE id = ?')->execute([$active, $id]);
             admin_audit($action, 'admin', (string) $id, $other, ['active' => $active], $reason);

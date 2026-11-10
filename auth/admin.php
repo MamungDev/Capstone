@@ -1,6 +1,10 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__ . '/bootstrap.php';
+function admin_owner_email(): string { return 'regalariojayveesevilla@gmail.com'; }
+function admin_is_owner(array $admin): bool {
+    return mb_strtolower(trim((string) ($admin['email'] ?? ''))) === admin_owner_email();
+}
 function admin_allowed_emails(): array {
     $configured = app_config()['admin_allowed_emails'] ?? [];
     if (is_string($configured)) $configured = preg_split('/[,;\s]+/', $configured, -1, PREG_SPLIT_NO_EMPTY);
@@ -15,6 +19,11 @@ function admin_allowed_emails(): array {
 }
 function admin_email_allowed(string $email): bool {
     $email = mb_strtolower(trim($email));
+    ensure_database_schema();
+    $q = db()->prepare('SELECT status, reviewed_by_email FROM admin_access_requests WHERE email = ?');
+    $q->execute([$email]);
+    $request = $q->fetch();
+    if ($request) return $request['status'] === 'approved' && $request['reviewed_by_email'] === admin_owner_email();
     return in_array($email, admin_allowed_emails(), true);
 }
 // Upgrade existing installations without changing admin IDs, status, or audit history.
@@ -92,6 +101,8 @@ function admin_google_signin(array $identity): void {
     try {
         // Serialize provisioning so simultaneous callbacks cannot create duplicate admins.
         $pdo->query('SELECT id FROM admin_security_lock WHERE id = 1 FOR UPDATE');
+        // Approval may have been revoked while this callback waited for the lock.
+        if (!admin_email_allowed($email)) throw new DomainException('admin-not-allowed');
         $q = $pdo->prepare('SELECT * FROM admin_accounts WHERE email = ? FOR UPDATE');
         $q->execute([$email]); $admin = $q->fetch();
         if ($admin && ((int) $admin['active'] !== 1 || ($admin['google_sub'] !== null && $admin['google_sub'] !== $subject))) {
